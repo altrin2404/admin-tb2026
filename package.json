@@ -1,0 +1,36 @@
+{
+  "name": "techbeta-management-system",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "prisma generate && next build",
+    "start": "next start -p 3001",
+    "lint": "next lint \"./\""
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "canvas-confetti": "^1.9.4",
+    "clsx": "^2.1.1",
+    "docx": "^9.7.1",
+    "html5-qrcode": "^2.3.8",
+    "lucide-react": "^1.44.0",
+    "next": "16.3.4",
+    "qrcode": "^1.5.4",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "tailwind-merge": "^3.6.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/canvas-confetti": "^1.9.0",
+    "@types/node": "^20",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "postcss": "^8.4.49",
+    "prisma": "^5.22.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
