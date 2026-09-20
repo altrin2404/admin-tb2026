@@ -95,8 +95,8 @@ export function getShortCode(eventName: string): string {
 }
 
 /**
- * Format sequential Event ID (e.g. GB001, UV001, LT001, IF001, BB001, BNB001)
+ * Format sequential Event ID (e.g. GB01, UV01, LT01, IF01, BB01, BNB01)
  */
 export function formatEventId(shortCode: string, sequenceNumber: number): string {
-  return `${shortCode}${sequenceNumber.toString().padStart(3, '0')}`;
+  return `${shortCode}${sequenceNumber.toString().padStart(2, '0')}`;
 }

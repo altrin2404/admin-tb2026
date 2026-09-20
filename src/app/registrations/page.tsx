@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   ClipboardList, Users, IndianRupee, Clock, CheckCircle2,
   Search, Download, RefreshCw, ShieldCheck, ShieldAlert,
   X, Phone, Mail, QrCode, Edit, Trash2, UserPlus, FileText, Printer,
+  CheckCheck, AlertTriangle, Info,
 } from 'lucide-react';
 import { formatDate, exportToCSV } from '@/lib/utils';
 
@@ -36,6 +37,72 @@ interface Participant {
   createdAt: string;
 }
 
+interface Toast {
+  id: number;
+  type: 'success' | 'error' | 'info';
+  title: string;
+  message?: string;
+}
+
+let _toastCounter = 0;
+
+function ToastContainer({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: number) => void }) {
+  if (toasts.length === 0) return null;
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        bottom: '20px',
+        right: '12px',
+        zIndex: 2147483647,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+        alignItems: 'flex-end',
+        pointerEvents: 'none',
+        maxWidth: '340px',
+        width: 'calc(100vw - 24px)',
+      }}
+    >
+      {toasts.map((t) => (
+        <div
+          key={t.id}
+          className="animate-slideInRight"
+          style={{
+            pointerEvents: 'auto',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '10px',
+            padding: '12px 16px',
+            borderRadius: '16px',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.22)',
+            border: '1px solid',
+            fontSize: '13px',
+            fontWeight: 600,
+            width: '100%',
+            backgroundColor: t.type === 'success' ? '#059669' : t.type === 'error' ? '#dc2626' : '#1e293b',
+            borderColor: t.type === 'success' ? '#10b981' : t.type === 'error' ? '#ef4444' : '#334155',
+            color: '#ffffff',
+          }}
+        >
+          <span style={{ flexShrink: 0, marginTop: '1px' }}>
+            {t.type === 'success' && <CheckCheck className="w-4 h-4" />}
+            {t.type === 'error' && <AlertTriangle className="w-4 h-4" />}
+            {t.type === 'info' && <Info className="w-4 h-4" />}
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, lineHeight: 1.3 }}>{t.title}</div>
+            {t.message && <div style={{ fontSize: '11px', fontWeight: 400, opacity: 0.85, marginTop: '2px', lineHeight: 1.4 }}>{t.message}</div>}
+          </div>
+          <button onClick={() => onDismiss(t.id)} style={{ flexShrink: 0, opacity: 0.65, marginLeft: '2px', background: 'none', border: 'none', cursor: 'pointer', color: 'white', padding: 0 }}>
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function RegistrationsPage() {
   const [allParticipants, setAllParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,6 +114,15 @@ export default function RegistrationsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [passModalParticipant, setPassModalParticipant] = useState<Participant | null>(null);
   const [exportingDocx, setExportingDocx] = useState(false);
+
+  // ─ Toast State ─
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const showToast = useCallback((type: Toast['type'], title: string, message?: string) => {
+    const id = ++_toastCounter;
+    setToasts((prev) => [...prev, { id, type, title, message }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4500);
+  }, []);
+  const dismissToast = useCallback((id: number) => setToasts((prev) => prev.filter((t) => t.id !== id)), []);
 
   const fetchParticipants = async () => {
     try {
@@ -92,23 +168,52 @@ export default function RegistrationsPage() {
     [allParticipants, search, selectedCollege, selectedPaymentStatus]
   );
 
+  const sendConfirmationEmail = async (p: Participant) => {
+    showToast('info', 'Sending email...', `Dispatching confirmation to ${p.email}`);
+    try {
+      const res = await fetch(`/api/registrations/${p.id}/send-email`, { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('success', 'Email Sent!', `Confirmation mail with ${p.formattedParticipantId} delivered to ${p.email}`);
+      } else {
+        showToast('error', 'Email Failed', data.error || 'Could not send confirmation email');
+      }
+    } catch {
+      showToast('error', 'Email Failed', 'Network error — could not reach mail server');
+    }
+  };
+
   const toggleVerified = async (p: Participant) => {
-    setAllParticipants((prev) => prev.map((item) => item.id === p.id ? { ...item, isVerified: !item.isVerified } : item));
+    const willBeVerified = !p.isVerified;
+    setAllParticipants((prev) => prev.map((item) => item.id === p.id ? { ...item, isVerified: willBeVerified } : item));
+    if (willBeVerified) {
+      showToast('success', 'Payment Verified!', `${p.formattedParticipantId} – ${p.name} confirmed`);
+    } else {
+      showToast('info', 'Marked as Pending', `${p.formattedParticipantId} – ${p.name} set back to pending`);
+    }
     try {
       const res = await fetch(`/api/registrations/${p.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isVerified: !p.isVerified }),
+        body: JSON.stringify({ isVerified: willBeVerified }),
       });
-      if (!res.ok) fetchParticipants();
-    } catch { fetchParticipants(); }
+      if (!res.ok) { fetchParticipants(); showToast('error', 'Update Failed', 'Could not save verification status'); }
+    } catch { fetchParticipants(); showToast('error', 'Update Failed', 'Network error'); }
   };
 
   const handleDelete = async () => {
     if (!deletingId) return;
+    const deleted = allParticipants.find((p) => p.id === deletingId);
     setAllParticipants((prev) => prev.filter((p) => p.id !== deletingId));
-    try { await fetch(`/api/registrations/${deletingId}`, { method: 'DELETE' }); }
-    catch { fetchParticipants(); }
-    finally { setDeletingId(null); }
+    setDeletingId(null);
+    try {
+      const res = await fetch(`/api/registrations/${deletingId}`, { method: 'DELETE' });
+      if (res.ok) {
+        showToast('success', 'Participant Deleted', deleted ? `${deleted.name} removed` : 'Record removed');
+      } else {
+        fetchParticipants();
+        showToast('error', 'Delete Failed', 'Could not remove the participant');
+      }
+    } catch { fetchParticipants(); showToast('error', 'Delete Failed', 'Network error'); }
   };
 
   const handleExportCSV = () => {
@@ -132,9 +237,11 @@ export default function RegistrationsPage() {
   };
 
   return (
-    <div className="space-y-6 animate-fadeIn">
+    <>
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      <div className="space-y-6 animate-fadeIn">
       {/* Header */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2.5">
@@ -147,88 +254,90 @@ export default function RegistrationsPage() {
           </div>
           <p className="text-xs text-slate-500 mt-1">Overview of all participant registrations with payment status tracking.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          <button onClick={() => setIsAddingNew(true)} className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold transition-all shadow-xs">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          <button onClick={() => setIsAddingNew(true)} className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold transition-all shadow-xs active:scale-95">
             <UserPlus className="w-4 h-4" /><span>Add Participant</span>
           </button>
-          <button onClick={handleExportCSV} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200 transition-all">
-            <Download className="w-4 h-4 text-slate-600" /><span>Export CSV</span>
-          </button>
-          <button onClick={handleExportDocx} disabled={exportingDocx} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-violet-50 hover:bg-violet-100 text-violet-700 text-xs font-bold border border-violet-200 transition-all shadow-xs">
-            <FileText className={`w-4 h-4 text-violet-600 ${exportingDocx ? 'animate-bounce' : ''}`} />
-            <span>{exportingDocx ? 'Exporting...' : 'Export DOCX'}</span>
-          </button>
-          <button onClick={fetchParticipants} disabled={loading} className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 transition-all">
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-violet-600' : ''}`} />
-          </button>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button onClick={handleExportCSV} className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200 transition-all active:scale-95">
+              <Download className="w-4 h-4 text-slate-600" /><span>CSV</span>
+            </button>
+            <button onClick={handleExportDocx} disabled={exportingDocx} className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-violet-50 hover:bg-violet-100 text-violet-700 text-xs font-bold border border-violet-200 transition-all shadow-xs active:scale-95">
+              <FileText className={`w-4 h-4 text-violet-600 ${exportingDocx ? 'animate-bounce' : ''}`} />
+              <span>{exportingDocx ? '...' : 'DOCX'}</span>
+            </button>
+            <button onClick={fetchParticipants} disabled={loading} className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 transition-all active:scale-95 shrink-0">
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-violet-600' : ''}`} />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-4">
         {/* Total Participants */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 flex flex-col gap-3">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-3.5 sm:p-5 flex flex-col gap-2 sm:gap-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Participants</span>
-            <div className="w-9 h-9 rounded-xl bg-slate-100 flex items-center justify-center">
-              <Users className="w-5 h-5 text-slate-600" />
+            <span className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">Total</span>
+            <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-xl bg-slate-100 flex items-center justify-center">
+              <Users className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600" />
             </div>
           </div>
           {loading ? (
-            <div className="h-9 w-16 bg-slate-100 animate-pulse rounded-lg" />
+            <div className="h-8 w-16 bg-slate-100 animate-pulse rounded-lg" />
           ) : (
-            <span className="text-3xl font-black text-slate-900">{stats.total}</span>
+            <span className="text-2xl sm:text-3xl font-black text-slate-900">{stats.total}</span>
           )}
-          <p className="text-[11px] text-slate-400 font-medium">Registered for TechBETA 2026</p>
+          <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium">Participants</p>
         </div>
 
         {/* Total Amount */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 flex flex-col gap-3">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-3.5 sm:p-5 flex flex-col gap-2 sm:gap-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Amount</span>
-            <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center">
-              <IndianRupee className="w-5 h-5 text-blue-600" />
+            <span className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider">Amount</span>
+            <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-xl bg-blue-50 flex items-center justify-center">
+              <IndianRupee className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
             </div>
           </div>
           {loading ? (
-            <div className="h-9 w-24 bg-slate-100 animate-pulse rounded-lg" />
+            <div className="h-8 w-20 bg-slate-100 animate-pulse rounded-lg" />
           ) : (
-            <span className="text-3xl font-black text-slate-900">&#8377;{stats.totalAmount.toLocaleString('en-IN')}</span>
+            <span className="text-2xl sm:text-3xl font-black text-slate-900">&#8377;{stats.totalAmount.toLocaleString('en-IN')}</span>
           )}
-          <p className="text-[11px] text-slate-400 font-medium">&#8377;{stats.confirmedAmount.toLocaleString('en-IN')} confirmed</p>
+          <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate">&#8377;{stats.confirmedAmount.toLocaleString('en-IN')} confirmed</p>
         </div>
 
         {/* Pending */}
-        <div className="bg-white rounded-2xl border border-amber-100 shadow-xs p-5 flex flex-col gap-3">
+        <div className="bg-white rounded-2xl border border-amber-100 shadow-xs p-3.5 sm:p-5 flex flex-col gap-2 sm:gap-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-600 uppercase tracking-wider">Pending</span>
-            <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center">
-              <Clock className="w-5 h-5 text-amber-500" />
+            <span className="text-[10px] sm:text-xs font-bold text-amber-600 uppercase tracking-wider">Pending</span>
+            <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-xl bg-amber-50 flex items-center justify-center">
+              <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500" />
             </div>
           </div>
           {loading ? (
-            <div className="h-9 w-16 bg-amber-50 animate-pulse rounded-lg" />
+            <div className="h-8 w-16 bg-amber-50 animate-pulse rounded-lg" />
           ) : (
-            <span className="text-3xl font-black text-amber-600">{stats.pending}</span>
+            <span className="text-2xl sm:text-3xl font-black text-amber-600">{stats.pending}</span>
           )}
-          <p className="text-[11px] text-amber-400 font-medium">Awaiting payment verification</p>
+          <p className="text-[10px] sm:text-[11px] text-amber-400 font-medium truncate">Awaiting verify</p>
         </div>
 
         {/* Confirmed */}
-        <div className="bg-white rounded-2xl border border-emerald-100 shadow-xs p-5 flex flex-col gap-3">
+        <div className="bg-white rounded-2xl border border-emerald-100 shadow-xs p-3.5 sm:p-5 flex flex-col gap-2 sm:gap-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Confirmed</span>
-            <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
-              <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+            <span className="text-[10px] sm:text-xs font-bold text-emerald-600 uppercase tracking-wider">Confirmed</span>
+            <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+              <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500" />
             </div>
           </div>
           {loading ? (
-            <div className="h-9 w-16 bg-emerald-50 animate-pulse rounded-lg" />
+            <div className="h-8 w-16 bg-emerald-50 animate-pulse rounded-lg" />
           ) : (
-            <span className="text-3xl font-black text-emerald-600">{stats.confirmed}</span>
+            <span className="text-2xl sm:text-3xl font-black text-emerald-600">{stats.confirmed}</span>
           )}
-          <p className="text-[11px] text-emerald-400 font-medium">
-            {stats.total > 0 ? `${Math.round((stats.confirmed / stats.total) * 100)}% of total` : 'Payment verified'}
+          <p className="text-[10px] sm:text-[11px] text-emerald-500 font-medium truncate">
+            {stats.total > 0 ? `${Math.round((stats.confirmed / stats.total) * 100)}% verified` : 'Verified'}
           </p>
         </div>
       </div>
@@ -297,9 +406,12 @@ export default function RegistrationsPage() {
               ) : filteredParticipants.map((p) => (
                 <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                   <td className="py-3 px-3 text-center font-mono font-black text-slate-900 text-sm bg-slate-50/80">{p.participantNumber}</td>
-                  <td className="py-3 px-4 font-mono text-[11px] font-bold text-violet-700">
-                    <div>{p.teamId || p.formattedParticipantId}</div>
-                    {p.teamName && <div className="text-[10px] text-slate-500 font-sans mt-0.5">{p.teamName}</div>}
+                  <td className="py-3 px-4 font-mono text-[11px]">
+                    <div className="inline-block px-2 py-0.5 rounded-md bg-violet-50 text-violet-800 font-bold border border-violet-200">
+                      {p.formattedParticipantId || `TB${String(p.participantNumber).padStart(3, '0')}`}
+                    </div>
+                    {p.teamId && <div className="text-[10px] text-slate-500 font-sans mt-0.5">{p.teamId}</div>}
+                    {p.teamName && <div className="text-[10px] text-slate-400 font-sans">{p.teamName}</div>}
                   </td>
                   <td className="py-3 px-4">
                     <div className="font-bold text-slate-900 text-sm">{p.name}</div>
@@ -339,9 +451,10 @@ export default function RegistrationsPage() {
                   <td className="py-3 px-3 text-[11px] font-mono text-slate-500">{formatDate(p.createdAt)}</td>
                   <td className="py-3 px-3 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => setPassModalParticipant(p)} className="p-1.5 rounded-lg bg-slate-100 hover:bg-violet-50 text-violet-600 border border-slate-200 transition-colors"><QrCode className="w-3.5 h-3.5" /></button>
-                      <button onClick={() => setEditingParticipant(p)} className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors"><Edit className="w-3.5 h-3.5" /></button>
-                      <button onClick={() => setDeletingId(p.id)} className="p-1.5 rounded-lg bg-slate-100 hover:bg-red-50 text-red-600 border border-slate-200 hover:border-red-200 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => sendConfirmationEmail(p)} title="Send / Resend Confirmation Email" className="p-1.5 rounded-lg bg-slate-100 hover:bg-violet-50 text-violet-600 border border-slate-200 transition-colors"><Mail className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => setPassModalParticipant(p)} className="p-1.5 rounded-lg bg-slate-100 hover:bg-violet-50 text-violet-600 border border-slate-200 transition-colors" title="View Pass"><QrCode className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => setEditingParticipant(p)} className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors" title="Edit"><Edit className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => setDeletingId(p.id)} className="p-1.5 rounded-lg bg-slate-100 hover:bg-red-50 text-red-600 border border-slate-200 hover:border-red-200 transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   </td>
                 </tr>
@@ -358,15 +471,23 @@ export default function RegistrationsPage() {
             <div className="py-12 text-center"><Users className="w-10 h-10 text-slate-300 mx-auto mb-2" /><p className="font-semibold text-slate-700">No participants found.</p></div>
           ) : filteredParticipants.map((p) => (
             <div key={p.id} className="p-4 bg-white">
-              <div className="flex items-center justify-between gap-2 mb-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="h-6 px-2 rounded-md bg-slate-100 font-mono font-black text-xs text-slate-800 flex items-center border border-slate-200">#{p.participantNumber}</span>
-                  <span className="font-mono text-xs font-bold text-violet-700 truncate max-w-[130px]">{p.teamId || p.formattedParticipantId}</span>
+              <div className="flex items-center justify-between gap-1.5 mb-2">
+                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                  <span className="h-5 px-1.5 rounded bg-slate-100 font-mono font-black text-[11px] text-slate-800 flex items-center border border-slate-200 shrink-0">#{p.participantNumber}</span>
+                  <span className="font-mono text-xs font-bold text-violet-800 shrink-0">
+                    {p.formattedParticipantId || `TB${String(p.participantNumber).padStart(3, '0')}`}
+                  </span>
+                  {p.teamId && (
+                    <span className="font-mono text-[10px] text-slate-500 truncate min-w-0">
+                      ({p.teamId})
+                    </span>
+                  )}
                 </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => setPassModalParticipant(p)} className="p-1.5 rounded-lg bg-violet-50 text-violet-700 border border-violet-200"><QrCode className="w-4 h-4" /></button>
-                  <button onClick={() => setEditingParticipant(p)} className="p-1.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200"><Edit className="w-4 h-4" /></button>
-                  <button onClick={() => setDeletingId(p.id)} className="p-1.5 rounded-lg bg-red-50 text-red-600 border border-red-200"><Trash2 className="w-4 h-4" /></button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => sendConfirmationEmail(p)} title="Send / Resend Confirmation Email" className="p-1.5 rounded-lg bg-violet-50 text-violet-700 border border-violet-200 active:scale-90"><Mail className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => setPassModalParticipant(p)} className="p-1.5 rounded-lg bg-violet-50 text-violet-700 border border-violet-200 active:scale-90" title="View Pass"><QrCode className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => setEditingParticipant(p)} className="p-1.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 active:scale-90" title="Edit"><Edit className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => setDeletingId(p.id)} className="p-1.5 rounded-lg bg-red-50 text-red-600 border border-red-200 active:scale-90" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
               </div>
               <div className="mb-2">
@@ -375,8 +496,8 @@ export default function RegistrationsPage() {
                 <div className="text-xs text-slate-600 mt-1"><strong>{p.college}</strong> &bull; {p.department || 'IT'} {p.year ? `(${p.year})` : ''}</div>
               </div>
               <div className="flex flex-wrap items-center gap-2 text-xs mb-2 font-mono">
-                <a href={`tel:${p.phone}`} className="text-blue-700 flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200 font-bold"><Phone className="w-3 h-3" />{p.phone}</a>
-                {p.email && <a href={`mailto:${p.email}`} className="text-slate-600 flex items-center gap-1 truncate max-w-[200px]"><Mail className="w-3 h-3 text-slate-400" /><span className="truncate">{p.email}</span></a>}
+                <a href={`tel:${p.phone}`} className="text-blue-700 flex items-center gap-1 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200 font-bold active:scale-95"><Phone className="w-3.5 h-3.5" />{p.phone}</a>
+                {p.email && <a href={`mailto:${p.email}`} className="text-slate-600 flex items-center gap-1 truncate max-w-[200px] bg-slate-50 px-2 py-1 rounded-lg border border-slate-200"><Mail className="w-3.5 h-3.5 text-slate-400" /><span className="truncate">{p.email}</span></a>}
               </div>
               {p.allEvents.length > 0 && (
                 <div className="flex flex-wrap gap-1 mb-3">
@@ -387,8 +508,8 @@ export default function RegistrationsPage() {
                 <div className="flex items-center gap-1.5"><span className="text-slate-500">UTR:</span><span className="font-mono font-bold">{p.paymentUtr || 'N/A'}</span></div>
                 <span className="font-bold">&#8377;{p.amount || 200}</span>
               </div>
-              <button onClick={() => toggleVerified(p)} className={`w-full py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${p.isVerified ? 'bg-emerald-600 text-white' : 'bg-amber-100 text-amber-900 border border-amber-300'}`}>
-                {p.isVerified ? <><ShieldCheck className="w-4 h-4" />CONFIRMED</> : <><ShieldAlert className="w-4 h-4 text-amber-700" />Pending &mdash; Tap to Confirm</>}
+              <button onClick={() => toggleVerified(p)} className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-[0.99] ${p.isVerified ? 'bg-emerald-600 text-white' : 'bg-amber-100 text-amber-900 border border-amber-300'}`}>
+                {p.isVerified ? <><ShieldCheck className="w-4 h-4" />CONFIRMED &bull; PAYMENT VERIFIED</> : <><ShieldAlert className="w-4 h-4 text-amber-700" />Pending &mdash; Tap to Confirm</>}
               </button>
             </div>
           ))}
@@ -419,8 +540,15 @@ export default function RegistrationsPage() {
       )}
 
       {/* Pass Modal */}
-      {passModalParticipant && <PassModal participant={passModalParticipant} onClose={() => setPassModalParticipant(null)} />}
+      {passModalParticipant && (
+        <PassModal
+          participant={passModalParticipant}
+          onClose={() => setPassModalParticipant(null)}
+          onSendEmail={sendConfirmationEmail}
+        />
+      )}
     </div>
+    </>
   );
 }
 
@@ -524,7 +652,7 @@ function RegistrationFormModal({
 }
 
 // Pass Modal
-function PassModal({ participant, onClose }: { participant: Participant; onClose: () => void; }) {
+function PassModal({ participant, onClose, onSendEmail }: { participant: Participant; onClose: () => void; onSendEmail?: (p: Participant) => void; }) {
   const [qrUrl, setQrUrl] = useState('');
   useEffect(() => {
     const qrData = `${participant.teamId || participant.id}|${participant.name}|${participant.college}`;
@@ -547,7 +675,7 @@ function PassModal({ participant, onClose }: { participant: Participant; onClose
             {qrUrl ? <img src={qrUrl} alt="QR" className="w-40 h-40 rounded-xl border border-slate-300 p-1 bg-white" /> : <div className="w-40 h-40 bg-slate-200 rounded-xl animate-pulse" />}
           </div>
           <div className="space-y-0.5">
-            <div className="font-mono text-xs font-black text-violet-800">#{participant.participantNumber} &bull; {participant.teamId || 'PASS'}</div>
+            <div className="font-mono text-xs font-black text-violet-800">#{participant.participantNumber} &bull; {participant.formattedParticipantId || `TB${String(participant.participantNumber).padStart(3, '0')}`} {participant.teamId ? `(${participant.teamId})` : ''}</div>
             <div className="text-base font-black text-slate-900">{participant.name}</div>
             <div className="text-xs font-semibold text-slate-600">{participant.college}</div>
             <div className="text-[11px] text-slate-500">{participant.allEvents.join(', ') || 'Event Pass'}</div>
@@ -557,9 +685,19 @@ function PassModal({ participant, onClose }: { participant: Participant; onClose
             <span className={participant.isVerified ? 'text-emerald-700' : 'text-amber-600'}>{participant.isVerified ? 'CONFIRMED' : 'PENDING'}</span>
           </div>
         </div>
-        <div className="flex justify-center gap-2">
-          <button onClick={() => window.print()} className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs"><Printer className="w-4 h-4" />Print Pass</button>
-          <button onClick={onClose} className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-semibold text-xs">Close</button>
+        <div className="flex flex-wrap justify-center gap-2">
+          {onSendEmail && (
+            <button
+              onClick={() => onSendEmail(participant)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-violet-50 hover:bg-violet-100 text-violet-700 font-bold text-xs border border-violet-200 active:scale-95"
+              title="Send confirmation email with Master ID and PDF download link"
+            >
+              <Mail className="w-3.5 h-3.5" />
+              <span>Email Pass</span>
+            </button>
+          )}
+          <button onClick={() => window.print()} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs active:scale-95"><Printer className="w-3.5 h-3.5" />Print Pass</button>
+          <button onClick={onClose} className="px-3.5 py-2 rounded-xl bg-slate-100 text-slate-700 font-semibold text-xs active:scale-95">Close</button>
         </div>
       </div>
     </div>

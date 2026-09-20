@@ -27,6 +27,9 @@ interface EventReport {
   totalVerified: number;
   participants: Array<{
     id: string;
+    participantNumber?: number;
+    participantId?: string;
+    formattedParticipantId?: string;
     teamId?: string | null;
     teamName?: string | null;
     name: string;
@@ -40,6 +43,7 @@ interface EventReport {
     isEntered: boolean;
     enteredAt?: string | null;
     eventSequenceId: string;
+    isTeamEntry?: boolean;
     createdAt: string;
   }>;
 }
@@ -136,6 +140,8 @@ export default function EventDashboardsPage() {
     if (!search) return true;
     const s = search.toLowerCase();
     return (
+      (p.participantId && p.participantId.toLowerCase().includes(s)) ||
+      (p.formattedParticipantId && p.formattedParticipantId.toLowerCase().includes(s)) ||
       p.name.toLowerCase().includes(s) ||
       p.eventSequenceId.toLowerCase().includes(s) ||
       p.college.toLowerCase().includes(s) ||
@@ -147,8 +153,11 @@ export default function EventDashboardsPage() {
   const handleExportRoster = () => {
     if (!activeEvent) return;
     const exportData = filteredParticipants.map((p) => ({
-      "Event ID": p.eventSequenceId,
+      "Event Slot ID": p.eventSequenceId,
+      "Entry Type": p.isTeamEntry ? "Team" : "Individual",
+      "Master Participant ID": p.formattedParticipantId || p.participantId || "N/A",
       "Team ID": p.teamId || "N/A",
+      "Team Name": p.teamName || "",
       "Participant Name": p.name,
       "College": p.college,
       "Department": p.department || "",
@@ -171,8 +180,9 @@ export default function EventDashboardsPage() {
       setExportingDocx(true);
       const { exportEventRosterDocx } = await import('@/lib/docxExport');
       const docxParticipants = filteredParticipants.map((p, idx) => ({
-        participantNumber: idx + 1,
-        formattedParticipantId: p.eventSequenceId,
+        participantNumber: p.participantNumber || idx + 1,
+        formattedParticipantId: p.formattedParticipantId || p.participantId || p.eventSequenceId,
+        participantId: p.participantId || p.formattedParticipantId,
         teamId: p.teamId,
         teamName: p.teamName,
         name: p.name,
@@ -224,14 +234,14 @@ export default function EventDashboardsPage() {
       </div>
 
       {/* Event Selection Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar -mx-2.5 px-2.5">
         {events.map((ev) => {
           const isSelected = ev.id === activeEvent?.id;
           return (
             <button
               key={ev.id}
               onClick={() => setSelectedEventId(ev.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap border ${
+              className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap border active:scale-95 ${
                 isSelected
                   ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
                   : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
@@ -254,23 +264,23 @@ export default function EventDashboardsPage() {
       </div>
 
       {activeEvent && (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           
           {/* Active Event Command Card */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs relative overflow-hidden">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xs relative overflow-hidden">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 sm:gap-6">
               
               {/* Event Info */}
-              <div className="space-y-2">
+              <div className="space-y-1.5 sm:space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-sm font-black px-2.5 py-0.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
+                  <span className="font-mono text-xs sm:text-sm font-black px-2.5 py-0.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
                     {activeEvent.shortCode}
                   </span>
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-semibold bg-slate-100 text-slate-600">
                     {activeEvent.category} Event
                   </span>
                 </div>
-                <h2 className="text-xl sm:text-2xl font-black text-slate-900">
+                <h2 className="text-lg sm:text-2xl font-black text-slate-900">
                   {activeEvent.name}
                 </h2>
                 <p className="text-xs text-slate-500">
@@ -279,7 +289,7 @@ export default function EventDashboardsPage() {
               </div>
 
               {/* Event Participation Mode Dropdown */}
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2 min-w-[280px]">
+              <div className="p-3.5 sm:p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2 w-full lg:w-auto lg:min-w-[280px]">
                 <div className="flex items-center justify-between text-xs">
                   <span className="flex items-center gap-1.5 font-bold text-slate-800">
                     <Settings2 className="w-4 h-4 text-blue-600" />
@@ -294,7 +304,7 @@ export default function EventDashboardsPage() {
                   value={activeEvent.currentType}
                   onChange={(e) => handleTypeChange(activeEvent.id, e.target.value)}
                   disabled={updatingConfig}
-                  className="w-full px-3 py-2 rounded-lg bg-white border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500 shadow-xs"
+                  className="w-full px-3 py-2.5 rounded-lg bg-white border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500 shadow-xs"
                 >
                   <option value="Individual">Individual Participation (1 member)</option>
                   <option value="Team of 2">Team Participation (2 members)</option>
@@ -306,17 +316,17 @@ export default function EventDashboardsPage() {
               </div>
 
               {/* Quick Roster Stats */}
-              <div className="grid grid-cols-3 gap-3 text-center sm:min-w-[260px]">
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
-                  <div className="text-lg font-black text-slate-900">{activeEvent.totalRegistered}</div>
+              <div className="grid grid-cols-3 gap-2 sm:gap-3 text-center w-full lg:w-auto lg:min-w-[260px]">
+                <div className="p-2.5 sm:p-3 rounded-xl bg-slate-50 border border-slate-200">
+                  <div className="text-base sm:text-lg font-black text-slate-900">{activeEvent.totalRegistered}</div>
                   <div className="text-[10px] text-slate-500 font-medium">Registered</div>
                 </div>
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
-                  <div className="text-lg font-black text-emerald-700">{activeEvent.totalEntered}</div>
+                <div className="p-2.5 sm:p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                  <div className="text-base sm:text-lg font-black text-emerald-700">{activeEvent.totalEntered}</div>
                   <div className="text-[10px] text-emerald-600 font-medium">Checked In</div>
                 </div>
-                <div className="p-3 rounded-xl bg-blue-50 border border-blue-200">
-                  <div className="text-lg font-black text-blue-700">{activeEvent.totalVerified}</div>
+                <div className="p-2.5 sm:p-3 rounded-xl bg-blue-50 border border-blue-200">
+                  <div className="text-base sm:text-lg font-black text-blue-700">{activeEvent.totalVerified}</div>
                   <div className="text-[10px] text-blue-600 font-medium">Verified</div>
                 </div>
               </div>
@@ -325,36 +335,36 @@ export default function EventDashboardsPage() {
           </div>
 
           {/* Search & Export Toolbar */}
-          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="relative flex-1 max-w-md">
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-3">
+            <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder={`Search in ${activeEvent.name} by Name, ${activeEvent.shortCode} ID, College...`}
-                className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white"
+                placeholder={`Search ${activeEvent.name} (Name, ID, College)...`}
+                className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white"
               />
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2">
               <button
                 onClick={handleExportRoster}
-                className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200 transition-all shadow-xs"
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200 transition-all shadow-xs active:scale-95"
                 title="Export spreadsheet format"
               >
                 <Download className="w-4 h-4 text-slate-600" />
-                <span>Export CSV</span>
+                <span>CSV</span>
               </button>
 
               <button
                 onClick={handleExportDocx}
                 disabled={exportingDocx}
-                className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200 transition-all shadow-xs"
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200 transition-all shadow-xs active:scale-95"
                 title="Export official printable Microsoft Word attendance & judging roster"
               >
                 <FileText className={`w-4 h-4 text-blue-600 ${exportingDocx ? 'animate-bounce' : ''}`} />
-                <span>{exportingDocx ? 'Exporting...' : 'Export DOCX'}</span>
+                <span>{exportingDocx ? '...' : 'DOCX'}</span>
               </button>
             </div>
           </div>
@@ -366,7 +376,7 @@ export default function EventDashboardsPage() {
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[11px]">
-                    <th className="py-3 px-4 font-mono text-blue-700 w-28">Event ID</th>
+                    <th className="py-3 px-4 font-mono text-blue-700 w-32">Event / Participant ID</th>
                     <th className="py-3 px-4">Participant Name</th>
                     <th className="py-3 px-4">College & Dept</th>
                     <th className="py-3 px-4">Contact</th>
@@ -385,9 +395,25 @@ export default function EventDashboardsPage() {
                   ) : (
                     filteredParticipants.map((p) => (
                       <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-                        {/* Event Specific Sequential ID */}
-                        <td className="py-3 px-4 font-mono font-black text-blue-700 text-sm bg-slate-50/70">
-                          {p.eventSequenceId}
+                        {/* Event Specific Sequential ID & Participant ID */}
+                        <td className="py-3 px-4 font-mono text-xs bg-slate-50/70">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-black text-blue-700 text-sm">{p.eventSequenceId}</span>
+                            {p.isTeamEntry ? (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200">
+                                TEAM
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-200 text-slate-700">
+                                SOLO
+                              </span>
+                            )}
+                          </div>
+                          {(p.formattedParticipantId || p.participantId) && (
+                            <div className="inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-white text-slate-800 border border-slate-200 shadow-2xs">
+                              Master: {p.formattedParticipantId || p.participantId}
+                            </div>
+                          )}
                         </td>
 
                         {/* Name */}
@@ -469,12 +495,28 @@ export default function EventDashboardsPage() {
               ) : (
                 filteredParticipants.map((p) => (
                   <div key={p.id} className="p-4 bg-white space-y-2.5">
-                    {/* Top row: Event ID + Verified badge */}
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono font-black text-xs px-2.5 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
-                        {p.eventSequenceId}
-                      </span>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    {/* Top row: Event ID + Team/Solo + Master ID + Verified badge */}
+                    <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-mono font-black text-xs px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
+                          {p.eventSequenceId}
+                        </span>
+                        {p.isTeamEntry ? (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200">
+                            TEAM
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                            SOLO
+                          </span>
+                        )}
+                        {(p.formattedParticipantId || p.participantId) && (
+                          <span className="font-mono font-bold text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200">
+                            {p.formattedParticipantId || p.participantId}
+                          </span>
+                        )}
+                      </div>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
                         p.isVerified
                           ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                           : 'bg-amber-50 text-amber-700 border border-amber-200'

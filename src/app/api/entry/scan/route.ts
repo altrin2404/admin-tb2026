@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { formatParticipantId } from '@/lib/idGenerator';
 
 export async function POST(request: Request) {
   try {
@@ -11,19 +12,27 @@ export async function POST(request: Request) {
 
     const trimmed = qrData.trim();
     
-    // Website format is `${regId}|${name}|${college}`
+    // Support parsing numbers or TB prefixes (e.g. '1' -> 'TB001', 'tb5' -> 'TB005')
+    const numericPart = trimmed.replace(/^TB-?/i, '').trim();
+    const parsedNum = !isNaN(Number(numericPart)) && Number(numericPart) > 0 ? parseInt(numericPart, 10) : null;
+    const formattedFromNum = parsedNum ? formatParticipantId(parsedNum) : null;
+
+    // Website format can be `${teamId}|${name}|${college}` or contains participantId
     const parts = trimmed.split('|');
     const teamOrId = parts[0]?.trim();
     const nameFromQr = parts[1]?.trim();
 
-    // Look up by teamId, id, phone, or name match
+    // Look up by participantId (e.g. TB001), participantNumber, teamId, id, phone, or name match
     let participants = await prisma.registration.findMany({
       where: {
         OR: [
-          { teamId: teamOrId },
+          { participantId: { equals: teamOrId, mode: 'insensitive' } },
+          ...(formattedFromNum ? [{ participantId: { equals: formattedFromNum, mode: 'insensitive' as const } }] : []),
+          ...(parsedNum ? [{ participantNumber: parsedNum }] : []),
+          { teamId: { equals: teamOrId, mode: 'insensitive' as const } },
           { id: teamOrId },
           { phone: teamOrId },
-          { paymentUtr: teamOrId },
+          { paymentUtr: { equals: teamOrId, mode: 'insensitive' as const } },
           ...(nameFromQr ? [{ name: { contains: nameFromQr, mode: 'insensitive' as const } }] : []),
         ],
       },
@@ -35,6 +44,8 @@ export async function POST(request: Request) {
       participants = await prisma.registration.findMany({
         where: {
           OR: [
+            { participantId: { contains: trimmed, mode: 'insensitive' } },
+            { teamId: { contains: trimmed, mode: 'insensitive' } },
             { name: { contains: trimmed, mode: 'insensitive' } },
             { college: { contains: trimmed, mode: 'insensitive' } },
             { phone: { contains: trimmed } },
@@ -68,8 +79,13 @@ export async function POST(request: Request) {
         nonTech = p.event2 ? [p.event2] : [];
       }
 
+      const seqNum = p.participantNumber || 1;
+      const participantId = p.participantId || formatParticipantId(seqNum);
+
       return {
         ...p,
+        participantId,
+        formattedParticipantId: participantId,
         techEventsList: tech,
         nonTechEventsList: nonTech,
       };

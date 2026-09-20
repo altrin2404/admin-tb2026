@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Users, 
   Search, 
@@ -18,7 +18,10 @@ import {
   Printer, 
   X,
   Phone,
-  Mail
+  Mail,
+  CheckCheck,
+  AlertTriangle,
+  Info
 } from 'lucide-react';
 import { formatDate, formatTimeOnly, exportToCSV } from '@/lib/utils';
 import { sounds } from '@/lib/audio';
@@ -50,6 +53,89 @@ interface Participant {
   entryNotes?: string | null;
   createdAt: string;
 }
+
+// ─── Toast Types ───
+interface Toast {
+  id: number;
+  type: 'success' | 'error' | 'info';
+  title: string;
+  message?: string;
+}
+
+let _toastCounter = 0;
+
+// ─── Toast Container — must be rendered OUTSIDE any element that uses CSS
+//     transforms (like animate-fadeIn), as transforms break position:fixed.
+function ToastContainer({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: number) => void }) {
+  if (toasts.length === 0) return null;
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        bottom: '20px',
+        right: '12px',
+        zIndex: 2147483647,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+        alignItems: 'flex-end',
+        pointerEvents: 'none',
+        maxWidth: '340px',
+        width: 'calc(100vw - 24px)',
+      }}
+    >
+      {toasts.map((t) => (
+        <div
+          key={t.id}
+          className="animate-slideInRight"
+          style={{
+            pointerEvents: 'auto',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '10px',
+            padding: '12px 16px',
+            borderRadius: '16px',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.22)',
+            border: '1px solid',
+            fontSize: '13px',
+            fontWeight: 600,
+            width: '100%',
+            backgroundColor:
+              t.type === 'success' ? '#059669'
+              : t.type === 'error' ? '#dc2626'
+              : '#1e293b',
+            borderColor:
+              t.type === 'success' ? '#10b981'
+              : t.type === 'error' ? '#ef4444'
+              : '#334155',
+            color: '#ffffff',
+          }}
+        >
+          <span style={{ flexShrink: 0, marginTop: '1px' }}>
+            {t.type === 'success' && <CheckCheck className="w-4 h-4" />}
+            {t.type === 'error' && <AlertTriangle className="w-4 h-4" />}
+            {t.type === 'info' && <Info className="w-4 h-4" />}
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, lineHeight: 1.3 }}>{t.title}</div>
+            {t.message && (
+              <div style={{ fontSize: '11px', fontWeight: 400, opacity: 0.85, marginTop: '2px', lineHeight: 1.4 }}>
+                {t.message}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => onDismiss(t.id)}
+            style={{ flexShrink: 0, opacity: 0.65, marginLeft: '2px', background: 'none', border: 'none', cursor: 'pointer', color: 'white', padding: 0 }}
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 
 export default function MasterSheetPage() {
   const [allParticipants, setAllParticipants] = useState<Participant[]>([]);
@@ -129,25 +215,63 @@ export default function MasterSheetPage() {
     });
   }, [allParticipants, search, selectedEvent, selectedCollege, selectedEntryStatus, selectedPaymentStatus]);
 
+  // ─── Toast State ───
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const showToast = useCallback((type: Toast['type'], title: string, message?: string) => {
+    const id = ++_toastCounter;
+    setToasts((prev) => [...prev, { id, type, title, message }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4500);
+  }, []);
+
+  const dismissToast = useCallback((id: number) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const sendConfirmationEmail = async (p: Participant) => {
+    showToast('info', 'Sending email...', `Dispatching confirmation to ${p.email}`);
+    try {
+      const res = await fetch(`/api/registrations/${p.id}/send-email`, { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        sounds.playSuccess();
+        showToast('success', 'Email Sent!', `Confirmation mail with ${p.formattedParticipantId} delivered to ${p.email}`);
+      } else {
+        sounds.playError();
+        showToast('error', 'Email Failed', data.error || 'Could not send confirmation email');
+      }
+    } catch {
+      showToast('error', 'Email Failed', 'Network error — could not reach mail server');
+    }
+  };
+
   // Toggle single payment verified
   const toggleVerified = async (p: Participant) => {
+    const willBeVerified = !p.isVerified;
     // Optimistic UI update
     setAllParticipants((prev) =>
-      prev.map((item) => (item.id === p.id ? { ...item, isVerified: !item.isVerified } : item))
+      prev.map((item) => (item.id === p.id ? { ...item, isVerified: willBeVerified } : item))
     );
+    if (willBeVerified) {
+      showToast('success', 'Payment Verified!', `${p.formattedParticipantId} – ${p.name} marked as verified`);
+    } else {
+      showToast('info', 'Marked as Pending', `${p.formattedParticipantId} – ${p.name} set back to pending`);
+    }
     try {
       const res = await fetch(`/api/registrations/${p.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isVerified: !p.isVerified }),
+        body: JSON.stringify({ isVerified: willBeVerified }),
       });
       if (res.ok) {
         sounds.playSuccess();
       } else {
         fetchParticipants(); // revert on fail
+        showToast('error', 'Update Failed', 'Could not change verification status');
       }
     } catch {
       fetchParticipants();
+      showToast('error', 'Update Failed', 'Network error — please try again');
     }
   };
 
@@ -161,6 +285,12 @@ export default function MasterSheetPage() {
       prev.map((item) => (item.id === p.id ? { ...item, isEntered: nextEntered, enteredAt: nextEnteredAt } : item))
     );
 
+    if (nextEntered) {
+      showToast('success', 'Entry Checked In!', `${p.name} (${p.formattedParticipantId}) marked as entered`);
+    } else {
+      showToast('info', 'Entry Undone', `${p.name} entry status has been reset`);
+    }
+
     try {
       const endpoint = nextEntered ? '/api/entry/checkin' : '/api/entry/undo';
       const res = await fetch(endpoint, {
@@ -172,23 +302,32 @@ export default function MasterSheetPage() {
         if (nextEntered) sounds.playSuccess();
       } else {
         fetchParticipants();
+        showToast('error', 'Check-In Failed', 'Could not update entry status');
       }
     } catch {
       fetchParticipants();
+      showToast('error', 'Check-In Failed', 'Network error — please try again');
     }
   };
 
   // Delete participant
   const handleDelete = async () => {
     if (!deletingId) return;
+    const deleted = allParticipants.find((p) => p.id === deletingId);
     setAllParticipants((prev) => prev.filter((p) => p.id !== deletingId));
+    setDeletingId(null);
     try {
-      await fetch(`/api/registrations/${deletingId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/registrations/${deletingId}`, { method: 'DELETE' });
+      if (res.ok) {
+        showToast('success', 'Participant Deleted', deleted ? `${deleted.name} has been removed` : 'Record removed successfully');
+      } else {
+        fetchParticipants();
+        showToast('error', 'Delete Failed', 'Could not remove the participant');
+      }
     } catch (err) {
       console.error(err);
       fetchParticipants();
-    } finally {
-      setDeletingId(null);
+      showToast('error', 'Delete Failed', 'Network error — please try again');
     }
   };
 
@@ -198,6 +337,10 @@ export default function MasterSheetPage() {
     if (action === 'delete' && !confirm(`Are you sure you want to delete ${selectedIds.length} participants?`)) {
       return;
     }
+    const count = selectedIds.length;
+    const actionLabels: Record<string, string> = {
+      verify: 'Verified', unverify: 'Unmarked', checkin: 'Checked In', checkout: 'Checked Out', delete: 'Deleted'
+    };
     try {
       const res = await fetch('/api/registrations/batch', {
         method: 'POST',
@@ -207,9 +350,13 @@ export default function MasterSheetPage() {
       if (res.ok) {
         setSelectedIds([]);
         fetchParticipants();
+        showToast('success', `Bulk Action Done`, `${count} participant(s) ${actionLabels[action] || action}`);
+      } else {
+        showToast('error', 'Batch Action Failed', 'Server returned an error — please retry');
       }
     } catch (err) {
       console.error(err);
+      showToast('error', 'Batch Action Failed', 'Network error — please try again');
     }
   };
 
@@ -261,7 +408,11 @@ export default function MasterSheetPage() {
   };
 
   return (
-    <div className="space-y-6 animate-fadeIn">
+    <>
+      {/* Toast notifications — MUST be outside animate-fadeIn wrapper (transforms break position:fixed) */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      <div className="space-y-6 animate-fadeIn">
       
       {/* Top Title & Header Banner */}
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -280,42 +431,44 @@ export default function MasterSheetPage() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <button
             onClick={() => setIsAddingNew(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs"
+            className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs active:scale-95"
           >
             <UserPlus className="w-4 h-4" />
             <span>Add Participant</span>
           </button>
 
-          <button
-            onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200 transition-all"
-            title="Export spreadsheet format"
-          >
-            <Download className="w-4 h-4 text-slate-600" />
-            <span>Export CSV</span>
-          </button>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              onClick={handleExportCSV}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200 transition-all active:scale-95"
+              title="Export spreadsheet format"
+            >
+              <Download className="w-4 h-4 text-slate-600" />
+              <span>CSV</span>
+            </button>
 
-          <button
-            onClick={handleExportDocx}
-            disabled={exportingDocx}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200 transition-all shadow-xs"
-            title="Export official Microsoft Word printable attendance roster"
-          >
-            <FileText className={`w-4 h-4 text-blue-600 ${exportingDocx ? 'animate-bounce' : ''}`} />
-            <span>{exportingDocx ? 'Exporting...' : 'Export DOCX'}</span>
-          </button>
+            <button
+              onClick={handleExportDocx}
+              disabled={exportingDocx}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200 transition-all shadow-xs active:scale-95"
+              title="Export official Microsoft Word printable attendance roster"
+            >
+              <FileText className={`w-4 h-4 text-blue-600 ${exportingDocx ? 'animate-bounce' : ''}`} />
+              <span>{exportingDocx ? '...' : 'DOCX'}</span>
+            </button>
 
-          <button
-            onClick={fetchParticipants}
-            disabled={loading}
-            className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 transition-all"
-            title="Refresh from Supabase"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-600' : ''}`} />
-          </button>
+            <button
+              onClick={fetchParticipants}
+              disabled={loading}
+              className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 transition-all active:scale-95 shrink-0"
+              title="Refresh from Supabase"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-600' : ''}`} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -496,11 +649,16 @@ export default function MasterSheetPage() {
                         {p.participantNumber}
                       </td>
 
-                      {/* Team / Reg ID */}
-                      <td className="py-3 px-4 font-mono text-[11px] font-bold text-blue-700">
-                        <div>{p.teamId || p.formattedParticipantId}</div>
+                      {/* Participant ID & Team */}
+                      <td className="py-3 px-4 font-mono text-[11px]">
+                        <div className="inline-block px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 font-bold border border-blue-200">
+                          {p.formattedParticipantId || `TB${String(p.participantNumber).padStart(3, '0')}`}
+                        </div>
+                        {p.teamId && (
+                          <div className="text-[10px] text-slate-500 font-sans mt-0.5">{p.teamId}</div>
+                        )}
                         {p.teamName && (
-                          <div className="text-[10px] text-slate-500 font-sans mt-0.5">{p.teamName}</div>
+                          <div className="text-[10px] text-slate-400 font-sans">{p.teamName}</div>
                         )}
                       </td>
 
@@ -605,6 +763,13 @@ export default function MasterSheetPage() {
                       <td className="py-3 px-3 text-right">
                         <div className="flex items-center justify-end gap-1">
                           <button
+                            onClick={() => sendConfirmationEmail(p)}
+                            title="Send / Resend Confirmation Email"
+                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-blue-50 text-blue-600 border border-slate-200 transition-colors"
+                          >
+                            <Mail className="w-3.5 h-3.5" />
+                          </button>
+                          <button
                             onClick={() => setPassModalParticipant(p)}
                             title="View / Print Entry Pass"
                             className="p-1.5 rounded-lg bg-slate-100 hover:bg-blue-50 text-blue-600 border border-slate-200 transition-colors"
@@ -660,8 +825,8 @@ export default function MasterSheetPage() {
                   }`}
                 >
                   {/* Top Bar: S.No + Reg ID + Multi-Select Checkbox + Actions */}
-                  <div className="flex items-center justify-between gap-2 mb-2.5">
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between gap-1.5 mb-2">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
                       <input
                         type="checkbox"
                         checked={isSelected}
@@ -670,37 +835,49 @@ export default function MasterSheetPage() {
                             isSelected ? prev.filter((id) => id !== p.id) : [...prev, p.id]
                           );
                         }}
-                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 shrink-0"
                       />
-                      <span className="h-6 px-2 rounded-md bg-slate-100 font-mono font-black text-xs text-slate-800 flex items-center justify-center border border-slate-200">
+                      <span className="h-5 px-1.5 rounded bg-slate-100 font-mono font-black text-[11px] text-slate-800 flex items-center justify-center border border-slate-200 shrink-0">
                         #{p.participantNumber}
                       </span>
-                      <span className="font-mono text-xs font-bold text-blue-700 truncate max-w-[130px]">
-                        {p.teamId || p.formattedParticipantId}
+                      <span className="font-mono text-xs font-bold text-blue-800 shrink-0">
+                        {p.formattedParticipantId || `TB${String(p.participantNumber).padStart(3, '0')}`}
                       </span>
+                      {p.teamId && (
+                        <span className="font-mono text-[10px] text-slate-500 truncate min-w-0">
+                          ({p.teamId})
+                        </span>
+                      )}
                     </div>
 
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => sendConfirmationEmail(p)}
+                        title="Send / Resend Confirmation Email"
+                        className="p-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 active:scale-90"
+                      >
+                        <Mail className="w-3.5 h-3.5" />
+                      </button>
                       <button
                         onClick={() => setPassModalParticipant(p)}
                         title="View / Print Entry Pass"
-                        className="p-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
+                        className="p-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 active:scale-90"
                       >
-                        <QrCode className="w-4 h-4" />
+                        <QrCode className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => setEditingParticipant(p)}
                         title="Edit participant"
-                        className="p-1.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200"
+                        className="p-1.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 active:scale-90"
                       >
-                        <Edit className="w-4 h-4" />
+                        <Edit className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => setDeletingId(p.id)}
                         title="Delete participant"
-                        className="p-1.5 rounded-lg bg-red-50 text-red-600 border border-red-200 hover:bg-red-100"
+                        className="p-1.5 rounded-lg bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 active:scale-90"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -825,10 +1002,11 @@ export default function MasterSheetPage() {
             setEditingParticipant(null);
             setIsAddingNew(false);
           }}
-          onSave={() => {
+          onSave={(isEdit) => {
             setEditingParticipant(null);
             setIsAddingNew(false);
             fetchParticipants();
+            showToast('success', isEdit ? 'Participant Updated' : 'Participant Added', isEdit ? 'Details saved successfully' : 'New registration created successfully');
           }}
         />
       )}
@@ -867,10 +1045,12 @@ export default function MasterSheetPage() {
         <PassModal
           participant={passModalParticipant}
           onClose={() => setPassModalParticipant(null)}
+          onSendEmail={sendConfirmationEmail}
         />
       )}
 
     </div>
+    </>
   );
 }
 
@@ -882,7 +1062,7 @@ function ParticipantFormModal({
 }: {
   participant: Participant | null;
   onClose: () => void;
-  onSave: () => void;
+  onSave: (isEdit: boolean) => void;
 }) {
   const isEdit = !!participant;
   const [formData, setFormData] = useState({
@@ -935,7 +1115,7 @@ function ParticipantFormModal({
         throw new Error(d.error || 'Failed to save');
       }
 
-      onSave();
+      onSave(isEdit);
     } catch (error: unknown) {
       setErr(error instanceof Error ? error.message : 'Error saving participant');
     } finally {
@@ -1122,9 +1302,11 @@ function ParticipantFormModal({
 function PassModal({
   participant,
   onClose,
+  onSendEmail,
 }: {
   participant: Participant;
   onClose: () => void;
+  onSendEmail?: (p: Participant) => void;
 }) {
   const [qrUrl, setQrUrl] = useState('');
 
@@ -1170,7 +1352,7 @@ function PassModal({
 
           <div className="space-y-0.5">
             <div className="font-mono text-xs font-black text-blue-800">
-              #{participant.participantNumber} &bull; {participant.teamId || 'PASS'}
+              #{participant.participantNumber} &bull; {participant.formattedParticipantId || `TB${String(participant.participantNumber).padStart(3, '0')}`} {participant.teamId ? `(${participant.teamId})` : ''}
             </div>
             <div className="text-base font-black text-slate-900">{participant.name}</div>
             <div className="text-xs font-semibold text-slate-600">{participant.college}</div>
@@ -1185,17 +1367,27 @@ function PassModal({
           </div>
         </div>
 
-        <div className="flex justify-center gap-2 pt-2">
+        <div className="flex flex-wrap justify-center gap-2 pt-2">
+          {onSendEmail && (
+            <button
+              onClick={() => onSendEmail(participant)}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs border border-blue-200 transition-all active:scale-95"
+              title="Send confirmation email with Master ID and PDF download link"
+            >
+              <Mail className="w-3.5 h-3.5" />
+              <span>Email Pass</span>
+            </button>
+          )}
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs active:scale-95"
           >
-            <Printer className="w-4 h-4" />
-            <span>Print Badge / Pass</span>
+            <Printer className="w-3.5 h-3.5" />
+            <span>Print Pass</span>
           </button>
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs"
+            className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs active:scale-95"
           >
             Close
           </button>

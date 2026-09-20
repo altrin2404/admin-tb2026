@@ -48,23 +48,24 @@ export default function TopNav() {
   const isGateway = pathname === '/';
   const isScannerMode = pathname === '/scanner';
 
-  const adminNavLinks = [
-    { href: '/registrations', label: 'Registrations', icon: ClipboardList },
-    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/master', label: 'Master Sheet (1, 2, 3...)', icon: Users },
-    { href: '/events', label: 'Event Dashboards', icon: Trophy },
-    { href: '/spot-register', label: 'Spot Registration', icon: UserPlus },
+  const allNavLinks = [
+    { href: '/registrations', label: 'Registrations', shortLabel: 'Registrations', icon: ClipboardList, color: 'text-violet-600', activeBg: 'bg-violet-600' },
+    { href: '/dashboard', label: 'Dashboard', shortLabel: 'Dashboard', icon: LayoutDashboard, color: 'text-blue-600', activeBg: 'bg-blue-600' },
+    { href: '/master', label: 'Master Sheet', shortLabel: 'Master', icon: Users, color: 'text-blue-600', activeBg: 'bg-blue-600' },
+    { href: '/events', label: 'Event Dashboards', shortLabel: 'Events', icon: Trophy, color: 'text-amber-600', activeBg: 'bg-amber-600' },
+    { href: '/scanner', label: 'Attendance Station', shortLabel: 'Attendance', icon: QrCode, color: 'text-emerald-600', activeBg: 'bg-emerald-600' },
+    { href: '/spot-register', label: 'Spot Registration', shortLabel: 'Spot Reg', icon: UserPlus, color: 'text-indigo-600', activeBg: 'bg-indigo-600' },
   ];
 
   return (
-    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+    <header className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-xs">
+      <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-13 sm:h-16">
           
           {/* Logo & Portal Identity */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            <Link href="/" className="flex items-center gap-2 group">
-              <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-sm sm:text-base shadow-sm shadow-blue-500/30 group-hover:scale-105 transition-transform shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <Link href="/" className="flex items-center gap-2 group min-w-0">
+              <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-xs sm:text-base shadow-sm shadow-blue-500/30 group-hover:scale-105 transition-transform shrink-0">
                 TB
               </div>
               <div className="min-w-0">
@@ -79,7 +80,7 @@ export default function TopNav() {
                       ? 'bg-slate-100 text-slate-700 border border-slate-200'
                       : 'bg-blue-50 text-blue-700 border border-blue-200'
                   }`}>
-                    {isScannerMode ? 'QR Gate' : isGateway ? 'Portal' : 'Admin'}
+                    {isScannerMode ? 'Attendance' : isGateway ? 'Portal' : 'Admin'}
                   </span>
                 </div>
                 <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium truncate hidden xs:block">
@@ -91,59 +92,33 @@ export default function TopNav() {
 
           {/* Desktop Nav Links (Hidden on Gateway page for clean focus) */}
           {!isGateway && (
-            <nav className="hidden lg:flex items-center gap-1.5">
-              {!isScannerMode ? (
-                <>
-                  {adminNavLinks.map((link) => {
-                    const Icon = link.icon;
-                    const isActive = pathname === link.href;
+            <nav className="hidden lg:flex items-center gap-1">
+              {allNavLinks.map((link) => {
+                const Icon = link.icon;
+                const isActive = pathname === link.href;
 
-                    return (
-                      <Link
-                        key={link.href}
-                        href={link.href}
-                        className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
-                          isActive
-                            ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-xs'
-                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
-                        }`}
-                      >
-                        <Icon className="h-4 w-4" />
-                        <span>{link.label}</span>
-                      </Link>
-                    );
-                  })}
-                  
-                  {/* Quick Switch to QR Gate */}
+                return (
                   <Link
-                    href="/scanner"
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 ml-2 transition-all"
+                    key={link.href}
+                    href={link.href}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                      isActive
+                        ? link.href === '/scanner'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 shadow-xs'
+                          : 'bg-blue-50 text-blue-700 border border-blue-200 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
+                    }`}
                   >
-                    <QrCode className="h-4 w-4 text-emerald-600" />
-                    <span>Go to QR Entry</span>
+                    <Icon className={`h-4 w-4 ${isActive ? (link.href === '/scanner' ? 'text-emerald-600' : 'text-blue-600') : 'text-slate-500'}`} />
+                    <span>{link.label}</span>
                   </Link>
-                </>
-              ) : (
-                <>
-                  <span className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    <QrCode className="h-4 w-4" />
-                    <span>Gate Scanner Active</span>
-                  </span>
-
-                  <Link
-                    href="/dashboard"
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 ml-2 transition-all"
-                  >
-                    <ArrowLeftRight className="h-4 w-4 text-blue-600" />
-                    <span>Switch to Dashboard</span>
-                  </Link>
-                </>
-              )}
+                );
+              })}
             </nav>
           )}
 
           {/* Right Header Status Bar */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {/* Supabase Live Indicator (Visible on tablets & desktops) */}
             <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs text-slate-700">
               <span className="relative flex h-2 w-2">
@@ -154,18 +129,18 @@ export default function TopNav() {
               <span className="text-[11px] font-semibold text-slate-600">Live DB</span>
             </div>
 
-            {/* Live Clock */}
-            <div className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-mono font-bold text-slate-700">
-              <Clock className="h-3.5 w-3.5 text-blue-600" />
-              <span className="text-[11px] sm:text-xs">{time || '--:--:--'}</span>
+            {/* Live Clock (Hidden on mobile phones to give space for hamburger button) */}
+            <div className="hidden md:flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-mono font-bold text-slate-700">
+              <Clock className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+              <span className="text-xs">{time || '--:--'}</span>
             </div>
 
-            {/* Mobile / Tablet Menu Button (Shown on < lg screens when not on gateway) */}
+            {/* Mobile Menu Button - ALWAYS visible on < lg */}
             {!isGateway && (
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 lg:hidden transition-all focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 lg:hidden transition-all active:scale-90"
                 aria-label="Toggle navigation menu"
               >
                 {mobileMenuOpen ? (
@@ -180,106 +155,60 @@ export default function TopNav() {
 
         {/* Mobile Dropdown Menu Drawer */}
         {!isGateway && mobileMenuOpen && (
-          <div className="lg:hidden py-3 border-t border-slate-200 animate-fadeIn space-y-1">
-            {!isScannerMode ? (
-              <>
-                {adminNavLinks.map((link) => {
-                  const Icon = link.icon;
-                  const isActive = pathname === link.href;
+          <div className="lg:hidden py-3 border-t border-slate-200 animate-fadeIn space-y-1.5">
+            {allNavLinks.map((link) => {
+              const Icon = link.icon;
+              const isActive = pathname === link.href;
 
-                  return (
-                    <Link
-                      key={link.href}
-                      href={link.href}
-                      onClick={() => setMobileMenuOpen(false)}
-                      className={`flex items-center justify-between p-3 rounded-xl text-sm font-bold transition-all ${
-                        isActive
-                          ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-xs'
-                          : 'text-slate-700 hover:bg-slate-100'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Icon className="h-5 w-5 text-blue-600" />
-                        <span>{link.label}</span>
-                      </div>
-                      <span className="text-xs font-mono text-slate-400">&rarr;</span>
-                    </Link>
-                  );
-                })}
-
-                <div className="pt-2 border-t border-slate-100">
-                  <Link
-                    href="/scanner"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center justify-between p-3 rounded-xl text-sm font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-xs transition-all"
-                  >
-                    <div className="flex items-center gap-3">
-                      <QrCode className="h-5 w-5 text-emerald-600" />
-                      <span>Switch to QR Entry Gate Scanner</span>
-                    </div>
-                    <span className="text-xs font-mono text-emerald-600">&rarr;</span>
-                  </Link>
-                </div>
-              </>
-            ) : (
-              <Link
-                href="/dashboard"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center justify-between p-3 rounded-xl text-sm font-bold bg-blue-50 text-blue-800 border border-blue-200 shadow-xs transition-all"
-              >
-                <div className="flex items-center gap-3">
-                  <ArrowLeftRight className="h-5 w-5 text-blue-600" />
-                  <span>Return to Admin Dashboard</span>
-                </div>
-                <span className="text-xs font-mono text-blue-600">&rarr;</span>
-              </Link>
-            )}
-          </div>
-        )}
-
-        {/* Mobile Horizontal Quick Tab Bar (Shown on small screens for instant 1-tap switching) */}
-        {!isGateway && !mobileMenuOpen && (
-          <div className="flex lg:hidden overflow-x-auto py-2 gap-1.5 border-t border-slate-200 no-scrollbar -mx-1 px-1">
-            {!isScannerMode ? (
-              <>
-                {adminNavLinks.map((link) => {
-                  const Icon = link.icon;
-                  const isActive = pathname === link.href;
-                  return (
-                    <Link
-                      key={link.href}
-                      href={link.href}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap shrink-0 transition-all ${
-                        isActive
-                          ? 'bg-blue-600 text-white shadow-xs'
-                          : 'text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200'
-                      }`}
-                    >
-                      <Icon className="h-3.5 w-3.5 shrink-0" />
-                      <span>{link.label.split(' ')[0]}</span>
-                    </Link>
-                  );
-                })}
+              return (
                 <Link
-                  href="/scanner"
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap shrink-0 bg-emerald-100 text-emerald-800 border border-emerald-300"
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex items-center justify-between p-3 rounded-xl text-sm font-bold transition-all ${
+                    isActive
+                      ? link.href === '/scanner'
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-xs'
+                        : 'bg-blue-50 text-blue-700 border border-blue-200 shadow-xs'
+                      : 'text-slate-700 hover:bg-slate-100 bg-white border border-slate-100'
+                  }`}
                 >
-                  <QrCode className="h-3.5 w-3.5 shrink-0 text-emerald-700" />
-                  <span>QR Gate</span>
+                  <div className="flex items-center gap-3">
+                    <Icon className={`h-5 w-5 ${link.color}`} />
+                    <span>{link.label}</span>
+                  </div>
+                  <span className="text-xs font-mono text-slate-400">&rarr;</span>
                 </Link>
-              </>
-            ) : (
-              <Link
-                href="/dashboard"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap shrink-0 bg-blue-50 text-blue-700 border border-blue-200"
-              >
-                <ArrowLeftRight className="h-3.5 w-3.5 shrink-0" />
-                <span>Back to Dashboard</span>
-              </Link>
-            )}
+              );
+            })}
           </div>
         )}
 
+        {/* Mobile Horizontal Quick Tab Bar (Always accessible for instant 1-tap switching) */}
+        {!isGateway && !mobileMenuOpen && (
+          <div className="flex lg:hidden overflow-x-auto py-1.5 gap-1 border-t border-slate-200 no-scrollbar -mx-2.5 px-2.5 bg-slate-50/80">
+            {allNavLinks.map((link) => {
+              const Icon = link.icon;
+              const isActive = pathname === link.href;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap shrink-0 transition-all ${
+                    isActive
+                      ? link.href === '/scanner'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-700 bg-white hover:bg-slate-100 border border-slate-200'
+                  }`}
+                >
+                  <Icon className="h-3 w-3 shrink-0" />
+                  <span>{link.shortLabel}</span>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </div>
     </header>
   );

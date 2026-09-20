@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { TECHBETA_EVENTS, getShortCode, formatEventId } from '@/lib/events';
+import { formatParticipantId } from '@/lib/idGenerator';
 import fs from 'fs';
 import path from 'path';
 
@@ -44,9 +45,8 @@ export async function GET() {
       const shortCode = eventDef.shortCode;
       const configuredType = savedConfigs[eventDef.id] || eventDef.defaultType;
 
-      // Filter participants who selected this event in technical or non-technical events
-      const participantsForEvent: Array<typeof registrations[0] & { eventSequenceId: string }> = [];
-
+      // 1. Gather all registrations that match this event
+      const matchingRegs: typeof registrations = [];
       registrations.forEach((reg) => {
         let techList: string[] = [];
         let nonTechList: string[] = [];
@@ -70,12 +70,63 @@ export async function GET() {
         });
 
         if (matches) {
-          const seq = participantsForEvent.length + 1;
-          participantsForEvent.push({
-            ...reg,
-            eventSequenceId: formatEventId(shortCode, seq), // e.g. APW001, APW002
-          });
+          matchingRegs.push(reg);
         }
+      });
+
+      // 2. Count occurrences of team key within this event to distinguish Teams from Individuals
+      const teamCounts = new Map<string, number>();
+      matchingRegs.forEach((reg) => {
+        const teamKey = reg.teamId?.trim() || (reg.teamName?.trim() && reg.teamName.trim().toLowerCase() !== 'individual' ? `name:${reg.teamName.trim().toLowerCase()}` : null);
+        if (teamKey) {
+          teamCounts.set(teamKey, (teamCounts.get(teamKey) || 0) + 1);
+        }
+      });
+
+      // 3. Assign sequential event IDs:
+      // - If participants register as a team (sharing teamKey with other members in this event),
+      //   both/all of them are flagged with the SAME event sequence number (e.g. LT01).
+      // - If registered as an individual, they get their own unique sequence number (e.g. LT02).
+      // - Master numbers (e.g. TB001, TB002) remain completely distinct and never confused with event IDs.
+      let currentEventSeq = 0;
+      const teamSeqMap = new Map<string, number>();
+
+      const participantsForEvent: Array<typeof registrations[0] & {
+        eventSequenceId: string;
+        eventSequenceNumber: number;
+        formattedParticipantId?: string;
+        isTeamEntry: boolean;
+      }> = [];
+
+      matchingRegs.forEach((reg) => {
+        const teamKey = reg.teamId?.trim() || (reg.teamName?.trim() && reg.teamName.trim().toLowerCase() !== 'individual' ? `name:${reg.teamName.trim().toLowerCase()}` : null);
+        const isTeam = !!(teamKey && (teamCounts.get(teamKey) || 0) > 1);
+
+        let seq: number;
+        if (isTeam && teamKey) {
+          if (teamSeqMap.has(teamKey)) {
+            seq = teamSeqMap.get(teamKey)!;
+          } else {
+            currentEventSeq++;
+            teamSeqMap.set(teamKey, currentEventSeq);
+            seq = currentEventSeq;
+          }
+        } else {
+          currentEventSeq++;
+          seq = currentEventSeq;
+        }
+
+        const seqNum = reg.participantNumber || 1;
+        const participantId = reg.participantId || formatParticipantId(seqNum);
+
+        participantsForEvent.push({
+          ...reg,
+          participantId,
+          formattedParticipantId: participantId,
+          eventSequenceId: formatEventId(shortCode, seq), // e.g. LT01, GB01
+          eventSequenceNumber: seq,
+          isTeamEntry: isTeam,
+        });
       });
 
       const totalRegistered = participantsForEvent.length;

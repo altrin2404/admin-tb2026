@@ -80,7 +80,19 @@ export async function PUT(
     const { invalidateCache } = await import('@/lib/cache');
     invalidateCache();
 
-    return NextResponse.json({ message: 'Registration updated successfully', registration: updated });
+    // Trigger official confirmation email if transitioned to verified or requested explicitly
+    let emailDispatched = false;
+    if ((body.isVerified === true && !existing.isVerified) || body.sendEmail === true) {
+      const { triggerVerificationEmail } = await import('@/lib/email');
+      triggerVerificationEmail(updated).catch((e) => console.error('Email trigger failed:', e));
+      emailDispatched = true;
+    }
+
+    return NextResponse.json({ 
+      message: 'Registration updated successfully', 
+      registration: updated,
+      emailDispatched
+    });
   } catch (error) {
     console.error('Error updating registration:', error);
     return NextResponse.json({ error: 'Failed to update registration' }, { status: 500 });

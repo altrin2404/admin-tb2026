@@ -29,6 +29,7 @@ export default function SpotRegisterPage() {
   const [loading, setLoading] = useState(false);
   const [successData, setSuccessData] = useState<{
     id: string;
+    participantId: string;
     teamId: string;
     name: string;
     college: string;
@@ -70,6 +71,7 @@ export default function SpotRegisterPage() {
 
       setSuccessData({
         id: created.id,
+        participantId: created.participantId || `TB${String(created.participantNumber || 1).padStart(3, '0')}`,
         teamId: created.teamId,
         name: created.name,
         college: created.college,
@@ -106,25 +108,25 @@ export default function SpotRegisterPage() {
     <div className="max-w-3xl mx-auto space-y-6 animate-fadeIn">
       
       {/* Header */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2.5">
-              <UserPlus className="w-6 h-6 text-blue-600" />
-              On-Spot Walk-In Registration Desk
+              <UserPlus className="w-6 h-6 text-blue-600 shrink-0" />
+              <span>On-Spot Walk-In Desk</span>
             </h1>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200">
-              ₹200 Spot Fee
+              ₹200
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            Rapid walk-in participant registration with automatic fee recording and instant entry pass issuance.
+            Rapid walk-in registration with fee tracking and instant entry pass issuance.
           </p>
         </div>
       </div>
 
       {error && (
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
+        <div className="p-3.5 sm:p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
           {error}
         </div>
       )}
@@ -151,9 +153,14 @@ export default function SpotRegisterPage() {
             {successData.qrUrl && (
               <img src={successData.qrUrl} alt="QR Code" className="w-40 h-40 mx-auto rounded-xl border border-slate-300 p-1 bg-white shadow-xs" />
             )}
-            <div className="font-mono text-xs font-bold text-blue-700">
-              {successData.teamId}
+            <div className="inline-block px-3 py-1 rounded-lg bg-blue-100 text-blue-900 font-mono font-black text-sm border border-blue-300 shadow-xs">
+              {successData.participantId}
             </div>
+            {successData.teamId && (
+              <div className="font-mono text-xs font-semibold text-slate-500">
+                {successData.teamId}
+              </div>
+            )}
             <div className="text-base font-black text-slate-900">{successData.name}</div>
             <div className="text-xs font-semibold text-slate-600">{successData.college}</div>
             <div className="text-[10px] font-bold text-emerald-700 uppercase pt-1 border-t border-slate-200">

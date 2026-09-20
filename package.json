@@ -6,7 +6,8 @@
     "dev": "next dev -p 3001",
     "build": "prisma generate && next build",
     "start": "next start -p 3001",
-    "lint": "next lint \"./\""
+    "lint": "next lint \"./\"",
+    "reset-db": "node scripts/reset-registrations.js --delete-all"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

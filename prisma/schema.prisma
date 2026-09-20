@@ -10,6 +10,8 @@ datasource db {
 
 model Registration {
   id                 String    @id @default(cuid())
+  participantNumber  Int?      @unique @default(autoincrement())
+  participantId      String?   @unique
   teamId             String?
   teamName           String?
   name               String

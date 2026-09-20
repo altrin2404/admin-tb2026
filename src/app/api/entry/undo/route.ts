@@ -9,8 +9,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Participant ID is required.' }, { status: 400 });
     }
 
+    const existing = await prisma.registration.findFirst({
+      where: {
+        OR: [
+          { id },
+          { participantId: { equals: id, mode: 'insensitive' } },
+        ],
+      },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Participant not found.' }, { status: 404 });
+    }
+
     const updated = await prisma.registration.update({
-      where: { id },
+      where: { id: existing.id },
       data: {
         isEntered: false,
         enteredAt: null,

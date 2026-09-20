@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getCached, setCached, invalidateCache } from '@/lib/cache';
+import { formatParticipantId } from '@/lib/idGenerator';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,10 +38,14 @@ export async function GET(request: Request) {
           nonTechEvents = reg.event2 ? [reg.event2] : [];
         }
 
+        const seqNum = reg.participantNumber || index + 1;
+        const participantId = reg.participantId || formatParticipantId(seqNum);
+
         return {
           ...reg,
-          participantNumber: index + 1,
-          formattedParticipantId: `TB26-${(index + 1).toString().padStart(4, '0')}`,
+          participantNumber: seqNum,
+          participantId,
+          formattedParticipantId: participantId,
           techEventsList: techEvents,
           nonTechEventsList: nonTechEvents,
           allEvents: [...techEvents, ...nonTechEvents],
@@ -54,6 +59,8 @@ export async function GET(request: Request) {
     const filtered = withSequentialIds.filter((p) => {
       if (search) {
         const matchesSearch =
+          (p.participantId && p.participantId.toLowerCase().includes(search)) ||
+          (p.formattedParticipantId && p.formattedParticipantId.toLowerCase().includes(search)) ||
           p.name.toLowerCase().includes(search) ||
           p.email.toLowerCase().includes(search) ||
           p.phone.toLowerCase().includes(search) ||
@@ -156,11 +163,17 @@ export async function POST(request: Request) {
       },
     });
 
+    const participantId = formatParticipantId(created.participantNumber || 1);
+    const updated = await prisma.registration.update({
+      where: { id: created.id },
+      data: { participantId },
+    });
+
     // Invalidate cache immediately on new registration
     invalidateCache();
 
     return NextResponse.json(
-      { message: 'Spot registration created successfully', registration: created },
+      { message: 'Spot registration created successfully', registration: updated },
       { status: 201 }
     );
   } catch (error) {

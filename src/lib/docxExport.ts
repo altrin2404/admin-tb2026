@@ -15,6 +15,7 @@ import {
 
 export interface ParticipantDocxData {
   participantNumber: number;
+  participantId?: string;
   formattedParticipantId?: string;
   teamId?: string | null;
   teamName?: string | null;
@@ -110,15 +111,16 @@ export async function exportMasterSheetDocx(participants: ParticipantDocxData[])
       tableHeader: true,
       children: [
         createHeaderCell('S.No', 5),
-        createHeaderCell('Participant Name', 16),
-        createHeaderCell('Department', 11),
-        createHeaderCell('Year', 6),
-        createHeaderCell('College Name', 16),
-        createHeaderCell('Phone', 10),
-        createHeaderCell('Email Address', 14),
-        createHeaderCell('Events', 12),
+        createHeaderCell('Participant ID', 10),
+        createHeaderCell('Participant Name', 14),
+        createHeaderCell('Department', 10),
+        createHeaderCell('Year', 5),
+        createHeaderCell('College Name', 15),
+        createHeaderCell('Phone', 9),
+        createHeaderCell('Email Address', 13),
+        createHeaderCell('Events', 10),
         createHeaderCell('Status', 5),
-        createHeaderCell('Signature', 5),
+        createHeaderCell('Signature', 4),
       ],
     })
   );
@@ -127,20 +129,22 @@ export async function exportMasterSheetDocx(participants: ParticipantDocxData[])
   participants.forEach((p, idx) => {
     const eventsStr = p.allEvents?.join(', ') || 'General';
     const statusStr = p.isEntered ? 'ENTERED' : p.isVerified ? 'VERIFIED' : 'PENDING';
+    const partId = p.participantId || p.formattedParticipantId || `TB${String(idx + 1).padStart(3, '0')}`;
 
     rows.push(
       new TableRow({
         children: [
           createDataCell((idx + 1).toString(), 5, AlignmentType.CENTER, true),
-          createDataCell(p.name, 16, AlignmentType.LEFT, true),
-          createDataCell(p.department || 'IT', 11),
-          createDataCell(p.year || '3rd', 6, AlignmentType.CENTER),
-          createDataCell(p.college, 16),
-          createDataCell(p.phone, 10),
-          createDataCell(p.email, 14),
-          createDataCell(eventsStr, 12),
+          createDataCell(partId, 10, AlignmentType.CENTER, true),
+          createDataCell(p.name, 14, AlignmentType.LEFT, true),
+          createDataCell(p.department || 'IT', 10),
+          createDataCell(p.year || '3rd', 5, AlignmentType.CENTER),
+          createDataCell(p.college, 15),
+          createDataCell(p.phone, 9),
+          createDataCell(p.email, 13),
+          createDataCell(eventsStr, 10),
           createDataCell(statusStr, 5, AlignmentType.CENTER),
-          createDataCell('', 5), // Signature empty box
+          createDataCell('', 4), // Signature empty box
         ],
       })
     );
@@ -261,10 +265,11 @@ export async function exportEventRosterDocx(
 
     // Output grouped teams (both members in a single row!)
     teamsMap.forEach((members, teamId) => {
+      const eventSlotId = members[0]?.eventSequenceId || sNo.toString();
       const namesStr = members
-        .map((m, i) => `${i + 1}. ${m.name}`)
+        .map((m, i) => `${i + 1}. ${m.name} [Master: ${m.participantId || m.formattedParticipantId || ''}]`)
         .join('\n');
-      const teamTitle = members[0].teamName ? `[${members[0].teamName}]\n` : `[${teamId}]\n`;
+      const teamTitle = members[0].teamName ? `[${members[0].teamName}]\n` : ``;
       const combinedNames = teamTitle + namesStr;
 
       const deptsStr = Array.from(new Set(members.map((m) => m.department || 'IT'))).join(' / ');
@@ -275,7 +280,7 @@ export async function exportEventRosterDocx(
       rows.push(
         new TableRow({
           children: [
-            createDataCell(sNo.toString(), 6, AlignmentType.CENTER, true),
+            createDataCell(eventSlotId, 6, AlignmentType.CENTER, true),
             createDataCell(combinedNames, 25, AlignmentType.LEFT, true),
             createDataCell(deptsStr, 13),
             createDataCell(collegeStr, 20),
@@ -290,11 +295,15 @@ export async function exportEventRosterDocx(
 
     // Output any remaining single participants in the event
     singles.forEach((p) => {
+      const eventSlotId = p.eventSequenceId || sNo.toString();
+      const pLabel = p.participantId || p.formattedParticipantId
+        ? `${p.name}\n[Master: ${p.participantId || p.formattedParticipantId}]`
+        : p.name;
       rows.push(
         new TableRow({
           children: [
-            createDataCell(sNo.toString(), 6, AlignmentType.CENTER, true),
-            createDataCell(p.name, 25, AlignmentType.LEFT, true),
+            createDataCell(eventSlotId, 6, AlignmentType.CENTER, true),
+            createDataCell(pLabel, 25, AlignmentType.LEFT, true),
             createDataCell(p.department || 'IT', 13),
             createDataCell(p.college, 20),
             createDataCell(p.phone, 14),
@@ -308,11 +317,15 @@ export async function exportEventRosterDocx(
   } else {
     // Individual event: each person is a single row
     participants.forEach((p, idx) => {
+      const eventSlotId = p.eventSequenceId || (idx + 1).toString();
+      const pLabel = p.participantId || p.formattedParticipantId
+        ? `${p.name}\n[Master: ${p.participantId || p.formattedParticipantId}]`
+        : p.name;
       rows.push(
         new TableRow({
           children: [
-            createDataCell((idx + 1).toString(), 6, AlignmentType.CENTER, true),
-            createDataCell(p.name, 25, AlignmentType.LEFT, true),
+            createDataCell(eventSlotId, 6, AlignmentType.CENTER, true),
+            createDataCell(pLabel, 25, AlignmentType.LEFT, true),
             createDataCell(p.department || 'IT', 13),
             createDataCell(p.college, 20),
             createDataCell(p.phone, 14),

@@ -10,11 +10,21 @@ export async function POST(request: Request) {
     }
 
     if (action === 'verify') {
+      const recordsToVerify = await prisma.registration.findMany({
+        where: { id: { in: ids } },
+      });
+
       await prisma.registration.updateMany({
         where: { id: { in: ids } },
         data: { isVerified: true },
       });
-      return NextResponse.json({ message: `Successfully verified ${ids.length} registrations` });
+
+      const { triggerVerificationEmail } = await import('@/lib/email');
+      recordsToVerify.forEach((record) => {
+        triggerVerificationEmail(record).catch((e) => console.error('Batch email trigger error:', e));
+      });
+
+      return NextResponse.json({ message: `Successfully verified ${ids.length} registrations and queued confirmation emails` });
     }
 
     if (action === 'unverify') {
