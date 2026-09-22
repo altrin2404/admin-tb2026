@@ -147,11 +147,12 @@ export default function RegistrationsPage() {
   );
 
   const stats = useMemo(() => {
-    const total = allParticipants.length;
-    const confirmed = allParticipants.filter((p) => p.isVerified).length;
+    const validParticipants = allParticipants.filter((p) => p.paymentStatus !== 'INITIALIZED');
+    const total = validParticipants.length;
+    const confirmed = validParticipants.filter((p) => p.isVerified).length;
     const pending = total - confirmed;
-    const totalAmount = allParticipants.reduce((s, p) => s + (p.amount || 200), 0);
-    const confirmedAmount = allParticipants.filter((p) => p.isVerified).reduce((s, p) => s + (p.amount || 200), 0);
+    const totalAmount = validParticipants.reduce((s, p) => s + (p.amount || 200), 0);
+    const confirmedAmount = validParticipants.filter((p) => p.isVerified).reduce((s, p) => s + (p.amount || 200), 0);
     return { total, confirmed, pending, totalAmount, confirmedAmount };
   }, [allParticipants]);
 

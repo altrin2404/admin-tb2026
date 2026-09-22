@@ -39,7 +39,7 @@ export async function GET(request: Request) {
         }
 
         const seqNum = reg.participantNumber || index + 1;
-        const participantId = reg.participantId || formatParticipantId(seqNum);
+        const participantId = reg.participantId || (reg.paymentStatus !== 'INITIALIZED' ? formatParticipantId(seqNum) : null);
 
         return {
           ...reg,
