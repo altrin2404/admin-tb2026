@@ -32,6 +32,8 @@ interface Participant {
   amount?: number | null;
   isVerified: boolean;
   isEntered: boolean;
+  paymentStatus?: string | null;
+  razorpayOrderId?: string | null;
   enteredAt?: string | null;
   entryNotes?: string | null;
   createdAt: string;
@@ -277,7 +279,7 @@ export default function RegistrationsPage() {
               <FileText className={`w-4 h-4 text-violet-600 ${exportingDocx ? 'animate-bounce' : ''}`} />
               <span>{exportingDocx ? '...' : 'DOCX'}</span>
             </button>
-            <button onClick={fetchParticipants} disabled={loading} className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 transition-all active:scale-95 shrink-0">
+            <button onClick={() => fetchParticipants(false)} disabled={loading} className="p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 border border-slate-200 transition-all active:scale-95 shrink-0">
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-violet-600' : ''}`} />
             </button>
           </div>
