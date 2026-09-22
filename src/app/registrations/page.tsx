@@ -161,9 +161,13 @@ export default function RegistrationsPage() {
         if (!ok) return false;
       }
       if (selectedCollege && p.college.toLowerCase() !== selectedCollege.toLowerCase()) return false;
+      
+      // Hide initialized records unless the INITIALIZED filter is explicitly selected
+      if (selectedPaymentStatus !== 'INITIALIZED' && p.paymentStatus === 'INITIALIZED') return false;
+
       if (selectedPaymentStatus === 'verified' && !p.isVerified) return false;
       if (selectedPaymentStatus === 'unverified' && p.isVerified) return false;
-      if (selectedPaymentStatus === 'INITIALIZED' && p.paymentStatus !== 'INITIALIZED') return false;
+      if (selectedPaymentStatus === 'INITIALIZED' && !p.razorpayOrderId) return false;
       if (selectedPaymentStatus === 'PENDING' && p.paymentStatus !== 'PENDING') return false;
       if (selectedPaymentStatus === 'PAID' && p.paymentStatus !== 'PAID') return false;
       return true;
