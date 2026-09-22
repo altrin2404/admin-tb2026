@@ -19,7 +19,6 @@ interface ParticipantEmailData {
 export async function triggerVerificationEmail(participant: ParticipantEmailData) {
   const webhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
   if (!webhookUrl || !participant.email || !participant.email.includes('@')) {
-    console.log('[Email Dispatch] Skipped: No webhook URL or invalid email:', participant.email);
     return { success: false, reason: 'No webhook or invalid email' };
   }
 
@@ -77,10 +76,8 @@ export async function triggerVerificationEmail(participant: ParticipantEmailData
     });
 
     const data = await res.json();
-    console.log('[Email Dispatch] Webhook response for', displayId, ':', data);
     return { success: true, data };
   } catch (err) {
-    console.error('[Email Dispatch] Failed to trigger email for', displayId, err);
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }

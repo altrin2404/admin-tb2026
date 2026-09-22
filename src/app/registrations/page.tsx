@@ -124,16 +124,20 @@ export default function RegistrationsPage() {
   }, []);
   const dismissToast = useCallback((id: number) => setToasts((prev) => prev.filter((t) => t.id !== id)), []);
 
-  const fetchParticipants = async () => {
+  const fetchParticipants = async (isBackground = false) => {
     try {
-      setLoading(true);
+      if (!isBackground) setLoading(true);
       const res = await fetch('/api/registrations');
       const data = await res.json();
       if (res.ok) setAllParticipants(data.registrations || []);
-    } catch (err) { console.error(err); } finally { setLoading(false); }
+    } catch (err) { console.error(err); } finally { if (!isBackground) setLoading(false); }
   };
 
-  useEffect(() => { fetchParticipants(); }, []);
+  useEffect(() => { 
+    fetchParticipants(); 
+    const interval = setInterval(() => fetchParticipants(true), 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const collegeList = useMemo(() =>
     Array.from(new Set(allParticipants.map((p) => p.college.trim()))).filter(Boolean).sort(),
@@ -240,7 +244,7 @@ export default function RegistrationsPage() {
       setExportingDocx(true);
       const { exportMasterSheetDocx } = await import('@/lib/docxExport');
       await exportMasterSheetDocx(filteredParticipants);
-    } catch (err) { console.error(err); } finally { setExportingDocx(false); }
+    } catch (err) { /* silent fail or handle */ } finally { setExportingDocx(false); }
   };
 
   return (
