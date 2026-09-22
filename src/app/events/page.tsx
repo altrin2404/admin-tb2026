@@ -135,7 +135,6 @@ export default function EventDashboardsPage() {
     }
   };
 
-  // Instant in-memory filter
   const filteredParticipants = activeEvent?.participants.filter((p) => {
     if (!search) return true;
     const s = search.toLowerCase();
@@ -149,6 +148,15 @@ export default function EventDashboardsPage() {
       (p.teamId && p.teamId.toLowerCase().includes(s))
     );
   }) || [];
+
+  const groupedParticipants = React.useMemo(() => {
+    const groups: Record<string, typeof filteredParticipants> = {};
+    filteredParticipants.forEach(p => {
+      if (!groups[p.eventSequenceId]) groups[p.eventSequenceId] = [];
+      groups[p.eventSequenceId].push(p);
+    });
+    return Object.values(groups);
+  }, [filteredParticipants]);
 
   const handleExportRoster = () => {
     if (!activeEvent) return;
@@ -386,101 +394,122 @@ export default function EventDashboardsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredParticipants.length === 0 ? (
+                  {groupedParticipants.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="py-10 text-center text-slate-500">
                         No participants registered for {activeEvent.name} matching search.
                       </td>
                     </tr>
                   ) : (
-                    filteredParticipants.map((p) => (
-                      <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-                        {/* Event Specific Sequential ID & Participant ID */}
-                        <td className="py-3 px-4 font-mono text-xs bg-slate-50/70">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-black text-blue-700 text-sm">{p.eventSequenceId}</span>
-                            {p.isTeamEntry ? (
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200">
-                                TEAM
-                              </span>
-                            ) : (
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-200 text-slate-700">
-                                SOLO
-                              </span>
-                            )}
-                          </div>
-                          {(p.formattedParticipantId || p.participantId) && (
-                            <div className="inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-white text-slate-800 border border-slate-200 shadow-2xs">
-                              Master: {p.formattedParticipantId || p.participantId}
-                            </div>
-                          )}
-                        </td>
+                    groupedParticipants.map((group) => {
+                      const firstP = group[0];
+                      const rowSpan = group.length;
 
-                        {/* Name */}
-                        <td className="py-3 px-4">
-                          <div className="font-bold text-slate-900 text-sm">{p.name}</div>
-                          {p.teamName && (
-                            <div className="text-[10px] text-slate-500">{p.teamName}</div>
-                          )}
-                        </td>
+                      return (
+                        <React.Fragment key={firstP.eventSequenceId}>
+                          {group.map((p, index) => (
+                            <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                              {/* Event Specific Sequential ID & Participant ID - Spanned for Team */}
+                              {index === 0 && (
+                                <td rowSpan={rowSpan} className="py-3 px-4 font-mono text-xs bg-slate-50/70 border-r border-slate-200">
+                                  <div className="flex flex-col items-start gap-1.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-black text-blue-700 text-sm">{p.eventSequenceId}</span>
+                                      {p.isTeamEntry ? (
+                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200">
+                                          TEAM
+                                        </span>
+                                      ) : (
+                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-200 text-slate-700">
+                                          SOLO
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex flex-col gap-1 mt-1">
+                                      {group.map((member, mIdx) => (
+                                        (member.formattedParticipantId || member.participantId) ? (
+                                          <div key={member.id} className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-white text-slate-600 border border-slate-200 shadow-2xs">
+                                            {mIdx + 1}. {member.formattedParticipantId || member.participantId}
+                                          </div>
+                                        ) : null
+                                      ))}
+                                    </div>
+                                    {p.teamName && (
+                                      <div className="mt-1 px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold rounded-sm">
+                                        {p.teamName}
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                              )}
 
-                        {/* College & Dept */}
-                        <td className="py-3 px-4">
-                          <div className="font-semibold text-slate-800">{p.college}</div>
-                          <div className="text-[11px] text-slate-500">
-                            {p.department || 'General'} {p.year ? `(${p.year})` : ''}
-                          </div>
-                        </td>
+                              {/* Name */}
+                              <td className="py-3 px-4">
+                                <div className="font-bold text-slate-900 text-sm">{p.name}</div>
+                              </td>
 
-                        {/* Contact */}
-                        <td className="py-3 px-4 font-mono text-[11px] text-slate-700">
-                          <div>{p.phone}</div>
-                          <div className="text-[10px] text-slate-400 truncate max-w-[130px] font-sans">
-                            {p.email}
-                          </div>
-                        </td>
+                              {/* College & Dept */}
+                              <td className="py-3 px-4">
+                                <div className="font-semibold text-slate-800">{p.college}</div>
+                                <div className="text-[11px] text-slate-500">
+                                  {p.department || 'General'} {p.year ? `(${p.year})` : ''}
+                                </div>
+                              </td>
 
-                        {/* Team ID */}
-                        <td className="py-3 px-3 font-mono text-[11px] text-slate-600">
-                          {p.teamId || '—'}
-                        </td>
+                              {/* Contact */}
+                              <td className="py-3 px-4 font-mono text-[11px] text-slate-700">
+                                <div>{p.phone}</div>
+                                <div className="text-[10px] text-slate-400 truncate max-w-[130px] font-sans">
+                                  {p.email}
+                                </div>
+                              </td>
 
-                        {/* Payment Verified */}
-                        <td className="py-3 px-3 text-center">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            p.isVerified
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : 'bg-amber-50 text-amber-700 border border-amber-200'
-                          }`}>
-                            {p.isVerified ? 'VERIFIED' : 'PENDING'}
-                          </span>
-                        </td>
+                              {/* Team ID - Spanned for Team */}
+                              {index === 0 && (
+                                <td rowSpan={rowSpan} className="py-3 px-3 font-mono text-[11px] text-slate-600 border-l border-slate-200 text-center">
+                                  {p.teamId || '—'}
+                                </td>
+                              )}
 
-                        {/* Gate Entry Checkbox Toggle */}
-                        <td className="py-3 px-3 text-center">
-                          <button
-                            onClick={() => toggleEntry(p.id, p.isEntered)}
-                            className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center justify-center gap-1 mx-auto transition-all ${
-                              p.isEntered
-                                ? 'bg-blue-50 text-blue-700 border border-blue-300'
-                                : 'bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200'
-                            }`}
-                          >
-                            {p.isEntered ? (
-                              <>
-                                <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
-                                <span>ENTERED</span>
-                              </>
-                            ) : (
-                              <>
-                                <Clock className="w-3.5 h-3.5" />
-                                <span>Not Entered</span>
-                              </>
-                            )}
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                              {/* Payment Verified */}
+                              <td className="py-3 px-3 text-center">
+                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  p.isVerified
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                    : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                }`}>
+                                  {p.isVerified ? 'VERIFIED' : 'PENDING'}
+                                </span>
+                              </td>
+
+                              {/* Gate Entry Checkbox Toggle */}
+                              <td className="py-3 px-3 text-center">
+                                <button
+                                  onClick={() => toggleEntry(p.id, p.isEntered)}
+                                  className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center justify-center gap-1 mx-auto transition-all ${
+                                    p.isEntered
+                                      ? 'bg-blue-50 text-blue-700 border border-blue-300'
+                                      : 'bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200'
+                                  }`}
+                                >
+                                  {p.isEntered ? (
+                                    <>
+                                      <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
+                                      <span>ENTERED</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Clock className="w-3.5 h-3.5" />
+                                      <span>Not Entered</span>
+                                    </>
+                                  )}
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </React.Fragment>
+                      );
+                    })
                   )}
                 </tbody>
               </table>

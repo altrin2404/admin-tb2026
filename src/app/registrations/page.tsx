@@ -161,8 +161,11 @@ export default function RegistrationsPage() {
         if (!ok) return false;
       }
       if (selectedCollege && p.college.toLowerCase() !== selectedCollege.toLowerCase()) return false;
-      if (selectedPaymentStatus === 'confirmed' && !p.isVerified) return false;
-      if (selectedPaymentStatus === 'pending' && p.isVerified) return false;
+      if (selectedPaymentStatus === 'verified' && !p.isVerified) return false;
+      if (selectedPaymentStatus === 'unverified' && p.isVerified) return false;
+      if (selectedPaymentStatus === 'INITIALIZED' && p.paymentStatus !== 'INITIALIZED') return false;
+      if (selectedPaymentStatus === 'PENDING' && p.paymentStatus !== 'PENDING') return false;
+      if (selectedPaymentStatus === 'PAID' && p.paymentStatus !== 'PAID') return false;
       return true;
     }),
     [allParticipants, search, selectedCollege, selectedPaymentStatus]
@@ -217,8 +220,8 @@ export default function RegistrationsPage() {
   };
 
   const handleExportCSV = () => {
-    const data = filteredParticipants.map((p) => ({
-      'No': p.participantNumber, 'ID': p.formattedParticipantId,
+    const data = filteredParticipants.map((p, index) => ({
+      'No': index + 1, 'ID': p.formattedParticipantId || `TB${String(p.participantNumber).padStart(3, '0')}`,
       'Name': p.name, 'College': p.college, 'Dept': p.department || '',
       'Phone': p.phone, 'Email': p.email, 'Events': p.allEvents.join('; '),
       'UTR': p.paymentUtr || 'N/A', 'Amount': p.amount || 200,
@@ -363,9 +366,11 @@ export default function RegistrationsPage() {
             {collegeList.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
           <select value={selectedPaymentStatus} onChange={(e) => setSelectedPaymentStatus(e.target.value)} className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs text-slate-800 focus:outline-none focus:border-violet-500 focus:bg-white">
-            <option value="">All Payment Status</option>
-            <option value="confirmed">Confirmed (Verified)</option>
-            <option value="pending">Pending</option>
+            <option value="">All Registrations</option>
+            <option value="verified">Verified (Confirmed)</option>
+            <option value="unverified">Unverified</option>
+            <option value="PAID">Paid via Razorpay</option>
+            <option value="INITIALIZED">Initialized (Checkout opened)</option>
           </select>
         </div>
       </div>
@@ -382,7 +387,7 @@ export default function RegistrationsPage() {
                 <th className="py-3 px-4">Participant &amp; Contact</th>
                 <th className="py-3 px-4">College &amp; Dept</th>
                 <th className="py-3 px-4">Events</th>
-                <th className="py-3 px-3 font-mono">UTR &amp; Amount</th>
+                <th className="py-3 px-3 font-mono">Amount &amp; Type</th>
                 <th className="py-3 px-3 text-center">Payment</th>
                 <th className="py-3 px-3">Registered</th>
                 <th className="py-3 px-3 text-right">Actions</th>
@@ -403,9 +408,9 @@ export default function RegistrationsPage() {
                     <p className="font-semibold text-slate-700">No participants found.</p>
                   </td>
                 </tr>
-              ) : filteredParticipants.map((p) => (
+              ) : filteredParticipants.map((p, index) => (
                 <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="py-3 px-3 text-center font-mono font-black text-slate-900 text-sm bg-slate-50/80">{p.participantNumber}</td>
+                  <td className="py-3 px-3 text-center font-mono font-black text-slate-900 text-sm bg-slate-50/80">{index + 1}</td>
                   <td className="py-3 px-4 font-mono text-[11px]">
                     <div className="inline-block px-2 py-0.5 rounded-md bg-violet-50 text-violet-800 font-bold border border-violet-200">
                       {p.formattedParticipantId || `TB${String(p.participantNumber).padStart(3, '0')}`}
@@ -433,8 +438,8 @@ export default function RegistrationsPage() {
                     </div>
                   </td>
                   <td className="py-3 px-3 font-mono text-[11px]">
-                    <span className="text-slate-800 font-medium">{p.paymentUtr || 'N/A'}</span>
-                    <div className="text-[10px] text-slate-500 font-sans">&#8377;{p.amount || 200}</div>
+                    <span className="text-slate-800 font-medium">&#8377;{p.amount || 250}</span>
+                    <div className="text-[10px] text-slate-500 font-sans uppercase font-bold text-blue-600 mt-0.5">Razorpay</div>
                   </td>
                   <td className="py-3 px-3 text-center">
                     <button
@@ -469,11 +474,11 @@ export default function RegistrationsPage() {
             <div className="py-12 text-center"><RefreshCw className="w-6 h-6 animate-spin mx-auto text-violet-600 mb-2" /><span>Loading...</span></div>
           ) : filteredParticipants.length === 0 ? (
             <div className="py-12 text-center"><Users className="w-10 h-10 text-slate-300 mx-auto mb-2" /><p className="font-semibold text-slate-700">No participants found.</p></div>
-          ) : filteredParticipants.map((p) => (
+          ) : filteredParticipants.map((p, index) => (
             <div key={p.id} className="p-4 bg-white">
               <div className="flex items-center justify-between gap-1.5 mb-2">
                 <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                  <span className="h-5 px-1.5 rounded bg-slate-100 font-mono font-black text-[11px] text-slate-800 flex items-center border border-slate-200 shrink-0">#{p.participantNumber}</span>
+                  <span className="h-5 px-1.5 rounded bg-slate-100 font-mono font-black text-[11px] text-slate-800 flex items-center border border-slate-200 shrink-0">#{index + 1}</span>
                   <span className="font-mono text-xs font-bold text-violet-800 shrink-0">
                     {p.formattedParticipantId || `TB${String(p.participantNumber).padStart(3, '0')}`}
                   </span>
@@ -505,8 +510,8 @@ export default function RegistrationsPage() {
                 </div>
               )}
               <div className="flex items-center justify-between text-xs py-2 px-3 bg-slate-50 rounded-xl border border-slate-200 mb-3">
-                <div className="flex items-center gap-1.5"><span className="text-slate-500">UTR:</span><span className="font-mono font-bold">{p.paymentUtr || 'N/A'}</span></div>
-                <span className="font-bold">&#8377;{p.amount || 200}</span>
+                <div className="flex items-center gap-1.5"><span className="text-slate-500">Type:</span><span className="font-mono font-bold text-blue-600">RAZORPAY</span></div>
+                <span className="font-bold">&#8377;{p.amount || 250}</span>
               </div>
               <button onClick={() => toggleVerified(p)} className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-[0.99] ${p.isVerified ? 'bg-emerald-600 text-white' : 'bg-amber-100 text-amber-900 border border-amber-300'}`}>
                 {p.isVerified ? <><ShieldCheck className="w-4 h-4" />CONFIRMED &bull; PAYMENT VERIFIED</> : <><ShieldAlert className="w-4 h-4 text-amber-700" />Pending &mdash; Tap to Confirm</>}
@@ -681,7 +686,7 @@ function PassModal({ participant, onClose, onSendEmail }: { participant: Partici
             <div className="text-[11px] text-slate-500">{participant.allEvents.join(', ') || 'Event Pass'}</div>
           </div>
           <div className="pt-2 border-t border-slate-200 flex justify-between text-[10px] font-mono font-bold">
-            <span>UTR: {participant.paymentUtr || 'VERIFIED'}</span>
+            <span>TYPE: RAZORPAY</span>
             <span className={participant.isVerified ? 'text-emerald-700' : 'text-amber-600'}>{participant.isVerified ? 'CONFIRMED' : 'PENDING'}</span>
           </div>
         </div>

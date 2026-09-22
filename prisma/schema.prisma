@@ -26,6 +26,10 @@ model Registration {
   nonTechnicalEvents String?
   paymentUtr         String?
   amount             Int?
+  paymentStatus      String    @default("INITIALIZED")
+  razorpayOrderId    String?
+  razorpayPaymentId  String?
+  razorpaySignature  String?
   isVerified         Boolean   @default(false)
   isEntered          Boolean   @default(false)
   enteredAt          DateTime?

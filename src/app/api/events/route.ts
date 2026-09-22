@@ -77,7 +77,7 @@ export async function GET() {
       // 2. Count occurrences of team key within this event to distinguish Teams from Individuals
       const teamCounts = new Map<string, number>();
       matchingRegs.forEach((reg) => {
-        const teamKey = reg.teamId?.trim() || (reg.teamName?.trim() && reg.teamName.trim().toLowerCase() !== 'individual' ? `name:${reg.teamName.trim().toLowerCase()}` : null);
+        const teamKey = reg.teamName?.trim() ? `${reg.teamId}_${reg.teamName.trim().toLowerCase()}` : null;
         if (teamKey) {
           teamCounts.set(teamKey, (teamCounts.get(teamKey) || 0) + 1);
         }
@@ -99,7 +99,7 @@ export async function GET() {
       }> = [];
 
       matchingRegs.forEach((reg) => {
-        const teamKey = reg.teamId?.trim() || (reg.teamName?.trim() && reg.teamName.trim().toLowerCase() !== 'individual' ? `name:${reg.teamName.trim().toLowerCase()}` : null);
+        const teamKey = reg.teamName?.trim() ? `${reg.teamId}_${reg.teamName.trim().toLowerCase()}` : null;
         const isTeam = !!(teamKey && (teamCounts.get(teamKey) || 0) > 1);
 
         let seq: number;

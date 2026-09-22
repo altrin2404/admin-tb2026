@@ -86,6 +86,34 @@ export async function PUT(
       const { triggerVerificationEmail } = await import('@/lib/email');
       triggerVerificationEmail(updated).catch((e) => console.error('Email trigger failed:', e));
       emailDispatched = true;
+
+      // Also sync to Google Sheets
+      const googleSheetWebhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
+      if (googleSheetWebhookUrl) {
+        const timestamp = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+        const rowData = {
+          timestamp,
+          teamId: updated.participantId || updated.id,
+          participantId: updated.participantId || updated.id,
+          teamName: updated.teamName || 'Individual',
+          memberNumber: 1, // Simplifying since this syncs individual rows
+          name: updated.name,
+          email: updated.email,
+          phone: updated.phone,
+          department: updated.department || "",
+          year: updated.year || "",
+          college: updated.college,
+          technicalEvents: JSON.parse(updated.technicalEvents || "[]").join(", "),
+          nonTechnicalEvents: JSON.parse(updated.nonTechnicalEvents || "[]").join(", "),
+          paymentUtr: updated.razorpayPaymentId || updated.paymentUtr || "N/A",
+          amount: updated.amount || 250,
+        };
+        fetch(googleSheetWebhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "register", rows: [rowData] }),
+        }).catch(err => console.error("Google Sheets backup sync failed:", err));
+      }
     }
 
     return NextResponse.json({ 
