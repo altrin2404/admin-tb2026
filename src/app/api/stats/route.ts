@@ -26,10 +26,10 @@ export async function GET() {
     const totalTeams = uniqueTeams.size;
 
     // Revenue calculation
-    const totalRevenue = all.reduce((acc, curr) => acc + (curr.amount || 200), 0);
+    const totalRevenue = all.reduce((acc, curr) => acc + (curr.amount || 250), 0);
     const verifiedRevenue = all
       .filter((r) => r.isVerified)
-      .reduce((acc, curr) => acc + (curr.amount || 200), 0);
+      .reduce((acc, curr) => acc + (curr.amount || 250), 0);
     const pendingRevenue = totalRevenue - verifiedRevenue;
 
     // College distribution

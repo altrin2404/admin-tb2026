@@ -308,18 +308,11 @@ export default function EventDashboardsPage() {
                   )}
                 </div>
 
-                <select
-                  value={activeEvent.currentType}
-                  onChange={(e) => handleTypeChange(activeEvent.id, e.target.value)}
-                  disabled={updatingConfig}
-                  className="w-full px-3 py-2.5 rounded-lg bg-white border border-slate-300 text-xs font-bold text-slate-900 focus:outline-none focus:border-blue-500 shadow-xs"
-                >
-                  <option value="Individual">Individual Participation (1 member)</option>
-                  <option value="Team of 2">Team Participation (2 members)</option>
-                  <option value="Team (1-2)">Team or Individual (1 - 2 members)</option>
-                </select>
+                <div className="w-full px-3 py-2.5 rounded-lg bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 shadow-xs">
+                  {activeEvent.currentType}
+                </div>
                 <div className="text-[10px] text-slate-500">
-                  Select whether this competition allows individual or team entries.
+                  Participation mode is strictly configured by the system admin.
                 </div>
               </div>
 

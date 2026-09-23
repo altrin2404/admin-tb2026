@@ -38,6 +38,18 @@ export async function PUT(
       return NextResponse.json({ error: 'Registration not found' }, { status: 404 });
     }
 
+    if (body.teamId && body.teamId !== existing.teamId) {
+      const existingTeamCount = await prisma.registration.count({
+        where: { teamId: body.teamId }
+      });
+      if (existingTeamCount >= 2) {
+        return NextResponse.json(
+          { error: 'This team already has the maximum of 2 members. Please create a new team or use another ID.' },
+          { status: 400 }
+        );
+      }
+    }
+
     // Determine entry timestamp transition
     let enteredAt = existing.enteredAt;
     if (body.isEntered !== undefined) {

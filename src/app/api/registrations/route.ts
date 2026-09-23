@@ -133,6 +133,18 @@ export async function POST(request: Request) {
       );
     }
 
+    if (body.teamId) {
+      const existingTeamCount = await prisma.registration.count({
+        where: { teamId: body.teamId }
+      });
+      if (existingTeamCount >= 2) {
+        return NextResponse.json(
+          { error: 'This team already has the maximum of 2 members. Please create a new team.' },
+          { status: 400 }
+        );
+      }
+    }
+
     const timestamp = Date.now().toString().slice(-4);
     const randomHex = Math.random().toString(36).substring(2, 6).toUpperCase();
     const teamId = body.teamId || `TB26-${timestamp}-${randomHex}`;
@@ -155,7 +167,7 @@ export async function POST(request: Request) {
         technicalEvents: JSON.stringify(techList),
         nonTechnicalEvents: JSON.stringify(nonTechList),
         paymentUtr: paymentUtr?.trim() || 'SPOT-CASH',
-        amount: amount || 200,
+        amount: amount || 250,
         isVerified: isVerified ?? true,
         isEntered: isEntered ?? false,
         enteredAt: isEntered ? new Date() : null,
