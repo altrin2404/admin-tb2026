@@ -58,7 +58,7 @@ export default function EventDashboardsPage() {
   const fetchEvents = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/events');
+      const res = await fetch('/api/events', { cache: 'no-store' });
       const data = await res.json();
       if (res.ok) {
         setEvents(data.events || []);

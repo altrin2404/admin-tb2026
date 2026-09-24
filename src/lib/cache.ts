@@ -4,7 +4,15 @@ interface CacheEntry<T> {
   timestamp: number;
 }
 
-const cacheStore = new Map<string, CacheEntry<unknown>>();
+declare global {
+  var _cacheStore: Map<string, CacheEntry<unknown>> | undefined;
+}
+
+const cacheStore = global._cacheStore || new Map<string, CacheEntry<unknown>>();
+
+if (process.env.NODE_ENV !== 'production') {
+  global._cacheStore = cacheStore;
+}
 
 export function getCached<T>(key: string, ttlMs: number = 6000): T | null {
   const entry = cacheStore.get(key);

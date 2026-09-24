@@ -35,6 +35,11 @@ export async function GET() {
     }
 
     const registrations = await prisma.registration.findMany({
+      where: {
+        paymentStatus: {
+          not: 'INITIALIZED'
+        }
+      },
       orderBy: { createdAt: 'asc' },
     });
 
