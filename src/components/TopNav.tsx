@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { 
   LayoutDashboard, 
   Users, 
@@ -14,11 +14,14 @@ import {
   ArrowLeftRight,
   Menu,
   X,
-  ClipboardList
+  ClipboardList,
+  Lock
 } from 'lucide-react';
+import { lockPortal } from '@/lib/auth';
 
 export default function TopNav() {
   const pathname = usePathname();
+  const router = useRouter();
   const [time, setTime] = useState<string>('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -50,9 +53,8 @@ export default function TopNav() {
 
   const allNavLinks = [
     { href: '/registrations', label: 'Registrations', shortLabel: 'Registrations', icon: ClipboardList, color: 'text-violet-600', activeBg: 'bg-violet-600' },
-    { href: '/dashboard', label: 'Dashboard', shortLabel: 'Dashboard', icon: LayoutDashboard, color: 'text-blue-600', activeBg: 'bg-blue-600' },
-    { href: '/master', label: 'Master Sheet', shortLabel: 'Master', icon: Users, color: 'text-blue-600', activeBg: 'bg-blue-600' },
     { href: '/events', label: 'Event Dashboards', shortLabel: 'Events', icon: Trophy, color: 'text-amber-600', activeBg: 'bg-amber-600' },
+    { href: '/master', label: 'Master Sheet', shortLabel: 'Master', icon: Users, color: 'text-blue-600', activeBg: 'bg-blue-600' },
     { href: '/scanner', label: 'Attendance Station', shortLabel: 'Attendance', icon: QrCode, color: 'text-emerald-600', activeBg: 'bg-emerald-600' },
     { href: '/spot-register', label: 'Spot Registration', shortLabel: 'Spot Reg', icon: UserPlus, color: 'text-indigo-600', activeBg: 'bg-indigo-600' },
   ];
@@ -64,7 +66,7 @@ export default function TopNav() {
           
           {/* Logo & Portal Identity */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <Link href="/" className="flex items-center gap-2 group min-w-0">
+            <Link href="/" onClick={() => lockPortal()} className="flex items-center gap-2 group min-w-0">
               <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-xs sm:text-base shadow-sm shadow-blue-500/30 group-hover:scale-105 transition-transform shrink-0">
                 TB
               </div>
@@ -135,6 +137,22 @@ export default function TopNav() {
               <span className="text-xs">{time || '--:--'}</span>
             </div>
 
+            {/* Lock Portal Session Button */}
+            {!isGateway && (
+              <button
+                type="button"
+                onClick={() => {
+                  lockPortal();
+                  router.push('/');
+                }}
+                title="Lock Portal Session"
+                className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-700 border border-slate-200 hover:border-red-200 text-xs font-bold transition-all active:scale-95"
+              >
+                <Lock className="h-3.5 w-3.5 text-slate-500" />
+                <span className="hidden sm:inline">Lock</span>
+              </button>
+            )}
+
             {/* Mobile Menu Button - ALWAYS visible on < lg */}
             {!isGateway && (
               <button
@@ -181,6 +199,22 @@ export default function TopNav() {
                 </Link>
               );
             })}
+
+            <button
+              type="button"
+              onClick={() => {
+                setMobileMenuOpen(false);
+                lockPortal();
+                router.push('/');
+              }}
+              className="w-full flex items-center justify-between p-3 rounded-xl text-sm font-bold text-red-600 bg-red-50/50 hover:bg-red-50 border border-red-200 transition-all mt-2"
+            >
+              <div className="flex items-center gap-3">
+                <Lock className="h-5 w-5 text-red-500" />
+                <span>Lock Portal Session</span>
+              </div>
+              <span className="text-xs font-mono text-red-400">&rarr;</span>
+            </button>
           </div>
         )}
 

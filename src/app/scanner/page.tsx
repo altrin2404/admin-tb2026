@@ -1,317 +1,184 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { 
-  QrCode, 
-  Camera, 
-  CameraOff, 
-  Upload, 
-  Search, 
-  CheckCircle2, 
-  AlertTriangle, 
-  Clock, 
-  RotateCw, 
-  ShieldCheck, 
-  ShieldAlert, 
-  Sparkles, 
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import {
+  QrCode,
+  Camera,
+  CameraOff,
+  Search,
+  CheckCircle2,
+  AlertTriangle,
+  Clock,
+  RotateCw,
+  ShieldCheck,
+  ShieldAlert,
   UserCheck,
-  Hash,
-  ArrowRight,
-  Sparkle,
   UserX,
-  X
+  X,
+  UserPlus,
+  Edit,
+  Trash2,
+  RefreshCw,
+  Download,
+  Users,
+  Check,
+  Phone,
+  ArrowRight
 } from 'lucide-react';
-import { formatDate, formatTimeOnly } from '@/lib/utils';
+import { formatTimeOnly, exportToCSV } from '@/lib/utils';
 import { playSound } from '@/lib/audio';
+
+interface Participant {
+  id: string;
+  participantId?: string | null;
+  participantNumber?: number | null;
+  formattedParticipantId?: string | null;
+  teamId?: string | null;
+  name: string;
+  email: string;
+  phone: string;
+  college: string;
+  department?: string | null;
+  year?: string | null;
+  amount?: number | null;
+  isVerified: boolean;
+  isEntered: boolean;
+  enteredAt?: string | null;
+  entryNotes?: string | null;
+  technicalEvents?: string | null;
+  nonTechnicalEvents?: string | null;
+  techEventsList?: string[];
+  nonTechEventsList?: string[];
+  allEvents?: string[];
+}
 
 interface ScanResult {
   found: boolean;
-  participant?: {
-    id: string;
-    participantId?: string | null;
-    participantNumber?: number | null;
-    formattedParticipantId?: string | null;
-    teamId?: string | null;
-    teamName?: string | null;
-    name: string;
-    email: string;
-    phone: string;
-    college: string;
-    department?: string | null;
-    year?: string | null;
-    paymentUtr?: string | null;
-    amount?: number | null;
-    isVerified: boolean;
-    isEntered: boolean;
-    enteredAt?: string | null;
-    techEventsList: string[];
-    nonTechEventsList: string[];
-  };
-  teamMembers?: Array<Record<string, unknown>>;
+  participant?: Participant;
   isDuplicate?: boolean;
   enteredAt?: string | null;
-  status: 'ready' | 'already_entered' | 'payment_pending';
   error?: string;
 }
 
-interface ScanLogItem {
-  id: string;
-  recordId?: string;
-  name: string;
-  college: string;
-  teamId: string;
-  participantId?: string;
-  time: string;
-  status: 'entered' | 'duplicate' | 'error' | 'removed';
-}
-
 export default function AttendancePage() {
-  // Mode selection: 'id' (Participant ID enter) or 'qr' (Live QR Scanner)
-  const [attendanceMode, setAttendanceMode] = useState<'id' | 'qr'>('id');
-  
-  const [scannerActive, setScannerActive] = useState(false);
+  // Simple view tabs: 'station' (Scan & Enter ID) or 'list' (All Attendees & CRUD)
+  const [activeTab, setActiveTab] = useState<'station' | 'list'>('station');
+
+  // Input & Camera states
+  const [idInput, setIdInput] = useState('');
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<'environment' | 'user'>('environment');
-  const [autoCheckIn, setAutoCheckIn] = useState(true);
-  const [participantIdInput, setParticipantIdInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [lastScanResult, setLastScanResult] = useState<ScanResult | null>(null);
-  const [scanHistory, setScanHistory] = useState<ScanLogItem[]>([]);
   const [cameraError, setCameraError] = useState('');
-  const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Active verified participant card awaiting confirmation
+  const [activeCandidate, setActiveCandidate] = useState<Participant | null>(null);
+  const [isDuplicateAlert, setIsDuplicateAlert] = useState(false);
+  const [duplicateTime, setDuplicateTime] = useState<string | null>(null);
+
+  // Attendees list state (for CRUD tab)
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [loadingList, setLoadingList] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'present' | 'absent'>('all');
+
+  // CRUD Modals
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [editModalParticipant, setEditModalParticipant] = useState<Participant | null>(null);
+  const [deleteModalParticipant, setDeleteModalParticipant] = useState<Participant | null>(null);
+
+  // Add Form state
+  const [addForm, setAddForm] = useState({
+    name: '',
+    phone: '',
+    college: '',
+    department: 'IT',
+    year: '3rd Year',
+    isVerified: true,
+    markPresent: true,
+  });
+
+  // Edit Form state
+  const [editForm, setEditForm] = useState({
+    name: '',
+    phone: '',
+    college: '',
+    department: '',
+    isVerified: false,
+    isEntered: false,
+  });
+
+  // Toast alert
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   const showToast = useCallback((type: 'success' | 'error' | 'info', text: string) => {
-    setToastMessage({ type, text });
+    setToast({ type, text });
     setTimeout(() => {
-      setToastMessage((cur) => cur?.text === text ? null : cur);
+      setToast((cur) => cur?.text === text ? null : cur);
     }, 4000);
   }, []);
 
   const html5QrCodeRef = useRef<unknown>(null);
-  const isProcessingRef = useRef(false);
-  const lastScannedTextRef = useRef<string>('');
-  const lastScannedTimeRef = useRef<number>(0);
-  const idInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Focus ID input when in ID mode
+  // Load roster data
+  const loadParticipants = useCallback(async () => {
+    try {
+      setLoadingList(true);
+      const res = await fetch('/api/registrations');
+      const data = await res.json();
+      if (res.ok) {
+        setParticipants(data.registrations || []);
+      }
+    } catch (err) {
+      console.error('Failed to load participants:', err);
+    } finally {
+      setLoadingList(false);
+    }
+  }, []);
+
   useEffect(() => {
-    if (attendanceMode === 'id') {
-      setTimeout(() => idInputRef.current?.focus(), 100);
+    loadParticipants();
+  }, [loadParticipants]);
+
+  // Focus input when entering station tab
+  useEffect(() => {
+    if (activeTab === 'station' && !cameraOpen) {
+      setTimeout(() => inputRef.current?.focus(), 150);
     }
-  }, [attendanceMode]);
+  }, [activeTab, cameraOpen]);
 
-  const handleProcessScan = useCallback(async (rawText: string) => {
-    const now = Date.now();
-    if (
-      rawText === lastScannedTextRef.current && 
-      now - lastScannedTimeRef.current < 2500
-    ) {
-      return;
-    }
-    lastScannedTextRef.current = rawText;
-    lastScannedTimeRef.current = now;
-
-    try {
-      setLoading(true);
-      const res = await fetch('/api/entry/scan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ qrData: rawText }),
-      });
-
-      const data: ScanResult = await res.json();
-      setLastScanResult(data);
-
-      if (!res.ok || !data.found || !data.participant) {
-        playSound('warning');
-        setScanHistory((prev) => [
-          {
-            id: Date.now().toString(),
-            name: 'Not Found',
-            college: data.error || 'Unrecognized ID/QR',
-            teamId: rawText.slice(0, 16),
-            participantId: rawText.toUpperCase().startsWith('TB') ? rawText.toUpperCase() : undefined,
-            time: new Date().toLocaleTimeString('en-IN', { hour12: true }),
-            status: 'error',
-          },
-          ...prev.slice(0, 19),
-        ]);
-        return;
-      }
-
-      const p = data.participant;
-      const displayId = p.participantId || (p.participantNumber ? `TB${String(p.participantNumber).padStart(3, '0')}` : undefined);
-
-      // Check if DUPLICATE ENTRY (Already marked attendance)
-      if (data.isDuplicate) {
-        playSound('warning');
-        setScanHistory((prev) => [
-          {
-            id: Date.now().toString(),
-            name: p.name,
-            college: p.college,
-            teamId: p.teamId || p.id,
-            participantId: displayId,
-            time: new Date().toLocaleTimeString('en-IN', { hour12: true }),
-            status: 'duplicate',
-          },
-          ...prev.slice(0, 19),
-        ]);
-        return;
-      }
-
-      if (autoCheckIn) {
-        await executeCheckIn(p.id, false, false);
-      } else {
-        playSound('success');
-      }
-
-    } catch (err) {
-      console.error('Scan processing error:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [autoCheckIn]);
-
-  const executeCheckIn = async (participantId: string, forceOverride: boolean = false, verifyPayment: boolean = false) => {
-    try {
-      setLoading(true);
-      const res = await fetch('/api/entry/checkin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: participantId,
-          forceOverride,
-          verifyPayment,
-        }),
-      });
-
-      const result = await res.json();
-
-      if (res.ok && result.success) {
-        playSound('success');
-        const p = result.participant;
-        setLastScanResult((prev) => prev ? {
-          ...prev,
-          isDuplicate: false,
-          status: 'ready',
-          participant: {
-            ...prev.participant!,
-            isEntered: true,
-            enteredAt: result.enteredAt,
-            isVerified: verifyPayment ? true : prev.participant!.isVerified,
-          },
-        } : null);
-
-        const displayId = prevParticipantDisplayId();
-
-        setScanHistory((prev) => [
-          {
-            id: Date.now().toString(),
-            recordId: p.id,
-            name: p.name,
-            college: p.college,
-            teamId: p.teamId || p.id,
-            participantId: displayId,
-            time: new Date().toLocaleTimeString('en-IN', { hour12: true }),
-            status: 'entered',
-          },
-          ...prev.slice(0, 19),
-        ]);
-
-        showToast('success', `${p.name} marked Present (${displayId || 'TB'})`);
-      } else if (result.duplicate) {
-        playSound('warning');
-        setLastScanResult((prev) => prev ? {
-          ...prev,
-          isDuplicate: true,
-          status: 'already_entered',
-          enteredAt: result.enteredAt,
-        } : null);
-        showToast('error', `Already checked in earlier`);
-      }
-    } catch (err) {
-      console.error('Attendance check-in execution error:', err);
-      showToast('error', 'Error recording attendance');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const executeUndo = async (participantRecordId: string, participantName?: string) => {
-    if (!confirm(`Are you sure you want to REMOVE attendance for ${participantName || 'this participant'}? They will be marked as absent.`)) {
-      return;
-    }
-    try {
-      setLoading(true);
-      const res = await fetch('/api/entry/undo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: participantRecordId }),
-      });
-
-      const result = await res.json();
-
-      if (res.ok && result.success) {
-        playSound('warning');
-        setLastScanResult((prev) => {
-          if (!prev) return null;
-          return {
-            ...prev,
-            isDuplicate: false,
-            status: 'ready',
-            participant: prev.participant ? {
-              ...prev.participant,
-              isEntered: false,
-              enteredAt: null,
-            } : undefined,
-          };
-        });
-
-        // Update session scan history
-        setScanHistory((prev) =>
-          prev.map((item) =>
-            item.recordId === participantRecordId || item.teamId === participantRecordId || (participantName && item.name === participantName)
-              ? { ...item, status: 'removed' as const, college: 'Attendance Removed' }
-              : item
-          )
-        );
-
-        showToast('info', `Attendance removed for ${participantName || 'participant'}`);
-      } else {
-        showToast('error', result.error || 'Failed to remove attendance');
-      }
-    } catch (err) {
-      console.error('Undo attendance error:', err);
-      showToast('error', 'Network error: could not remove attendance');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const prevParticipantDisplayId = () => {
-    if (!lastScanResult?.participant) return undefined;
-    const p = lastScanResult.participant;
-    return p.participantId || (p.participantNumber ? `TB${String(p.participantNumber).padStart(3, '0')}` : undefined);
-  };
-
+  // Camera Management
   const startCamera = async () => {
     setCameraError('');
+    setCameraOpen(true);
     try {
+      // Small tick to ensure DOM element is painted
+      await new Promise((resolve) => setTimeout(resolve, 80));
+
       const { Html5Qrcode } = await import('html5-qrcode');
-      
       if (html5QrCodeRef.current) {
         try {
           const current = html5QrCodeRef.current as { stop: () => Promise<void> };
           await current.stop();
-        } catch {}
+        } catch { }
       }
 
-      const qrScanner = new Html5Qrcode('qr-reader');
+      const elem = document.getElementById('qr-camera-box');
+      if (!elem) {
+        throw new Error('Camera container element not found');
+      }
+
+      const qrScanner = new Html5Qrcode('qr-camera-box');
       html5QrCodeRef.current = qrScanner;
 
       const config = {
         fps: 15,
-        qrbox: { width: 260, height: 260 },
+        qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+          const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+          const size = Math.max(160, Math.floor(minEdge * 0.72));
+          return { width: size, height: size };
+        },
         aspectRatio: 1.0,
       };
 
@@ -319,20 +186,15 @@ export default function AttendancePage() {
         { facingMode: cameraFacing },
         config,
         (decodedText) => {
-          if (!isProcessingRef.current) {
-            handleProcessScan(decodedText);
-          }
+          handleLookup(decodedText);
+          stopCamera();
         },
-        () => {}
+        () => { }
       );
-
-      setScannerActive(true);
-    } catch (err: unknown) {
+    } catch (err) {
       console.error('Camera startup error:', err);
-      setCameraError(
-        'Unable to access camera. Please allow camera permissions or use the Participant ID entry option.'
-      );
-      setScannerActive(false);
+      setCameraError('Unable to open camera. Please allow camera permissions or type the ID manually.');
+      setCameraOpen(false);
     }
   };
 
@@ -342,50 +204,17 @@ export default function AttendancePage() {
         const scanner = html5QrCodeRef.current as { stop: () => Promise<void>; clear: () => void };
         await scanner.stop();
         scanner.clear();
-      } catch {}
+      } catch { }
       html5QrCodeRef.current = null;
     }
-    setScannerActive(false);
+    setCameraOpen(false);
   };
 
-  const toggleFacing = async () => {
-    const nextMode = cameraFacing === 'environment' ? 'user' : 'environment';
-    setCameraFacing(nextMode);
-    if (scannerActive) {
-      await stopCamera();
-      setTimeout(startCamera, 300);
-    }
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      setLoading(true);
-      const { Html5Qrcode } = await import('html5-qrcode');
-      const tempScanner = new Html5Qrcode('qr-file-temp');
-      const decodedText = await tempScanner.scanFile(file, true);
-      handleProcessScan(decodedText);
-      tempScanner.clear();
-    } catch (err) {
-      console.error('Failed to parse QR from image:', err);
-      alert('Could not find or decode a QR code from this image. Please ensure the QR is clear and well-lit.');
-    } finally {
-      setLoading(false);
-      e.target.value = '';
-    }
-  };
-
-  const handleIdSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Normalize: trim and uppercase so 'tb001' == 'TB001'
-    const raw = participantIdInput.trim().toUpperCase();
-    if (!raw) return;
-
-    handleProcessScan(raw);
-    setParticipantIdInput('');
-    idInputRef.current?.focus();
+  const flipCamera = async () => {
+    const nextFacing = cameraFacing === 'environment' ? 'user' : 'environment';
+    setCameraFacing(nextFacing);
+    await stopCamera();
+    setTimeout(startCamera, 200);
   };
 
   useEffect(() => {
@@ -393,628 +222,1246 @@ export default function AttendancePage() {
       if (html5QrCodeRef.current) {
         try {
           const scanner = html5QrCodeRef.current as { stop: () => Promise<void> };
-          scanner.stop().catch(() => {});
-        } catch {}
+          scanner.stop().catch(() => { });
+        } catch { }
       }
     };
   }, []);
 
-  return (
-    <div className="space-y-4 sm:space-y-6 animate-fadeIn">
-      <div id="qr-file-temp" className="hidden"></div>
+  // Lookup Participant by ID or QR text
+  const handleLookup = async (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
 
-      {/* Header & Controls Bar */}
-      <div className="bg-white p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between gap-2.5">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <UserCheck className="w-5 h-5 text-emerald-600 shrink-0" />
-            <h1 className="text-base sm:text-2xl font-black text-slate-900 truncate">
+    try {
+      setLoading(true);
+      const res = await fetch('/api/entry/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qrData: trimmed }),
+      });
+
+      const data: ScanResult = await res.json();
+
+      if (!res.ok || !data.found || !data.participant) {
+        playSound('warning');
+        showToast('error', data.error || 'Participant not found. Check the ID and try again.');
+        setActiveCandidate(null);
+        setIsDuplicateAlert(false);
+        return;
+      }
+
+      playSound('success');
+      const p = data.participant;
+      setActiveCandidate(p);
+
+      if (data.isDuplicate || p.isEntered) {
+        setIsDuplicateAlert(true);
+        setDuplicateTime(data.enteredAt || p.enteredAt || null);
+      } else {
+        setIsDuplicateAlert(false);
+        setDuplicateTime(null);
+      }
+    } catch (err) {
+      console.error('Lookup error:', err);
+      showToast('error', 'Network error during lookup');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Submit typed ID
+  const handleIdSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!idInput.trim()) return;
+    handleLookup(idInput.toUpperCase());
+    setIdInput('');
+  };
+
+  // Mark Present (Action with user confirmation)
+  const handleConfirmAttendance = async (participantId: string, verifyPayment: boolean = false) => {
+    try {
+      setLoading(true);
+      const res = await fetch('/api/entry/checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: participantId,
+          forceOverride: isDuplicateAlert,
+          verifyPayment,
+        }),
+      });
+
+      const result = await res.json();
+
+      if (res.ok && result.success) {
+        playSound('success');
+        const p = result.participant;
+        const displayId = p.participantId || (p.participantNumber ? `TB${String(p.participantNumber).padStart(3, '0')}` : 'TB');
+
+        showToast('success', `✓ Marked Present: ${p.name} (${displayId})`);
+
+        // Update candidate display
+        setActiveCandidate({
+          ...p,
+          isEntered: true,
+          enteredAt: result.enteredAt,
+          isVerified: verifyPayment ? true : p.isVerified,
+        });
+        setIsDuplicateAlert(false);
+
+        // Refresh list
+        loadParticipants();
+      } else {
+        showToast('error', result.error || 'Failed to record attendance');
+      }
+    } catch (err) {
+      console.error('Checkin error:', err);
+      showToast('error', 'Error recording attendance');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Mark Absent / Undo attendance
+  const handleRemoveAttendance = async (participantId: string, participantName: string) => {
+    if (!confirm(`Mark ${participantName} as ABSENT? This will remove their attendance record.`)) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const res = await fetch('/api/entry/undo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: participantId }),
+      });
+
+      const result = await res.json();
+
+      if (res.ok && result.success) {
+        playSound('warning');
+        showToast('info', `Attendance removed for ${participantName}`);
+
+        if (activeCandidate?.id === participantId) {
+          setActiveCandidate({
+            ...activeCandidate,
+            isEntered: false,
+            enteredAt: null,
+          });
+          setIsDuplicateAlert(false);
+        }
+
+        loadParticipants();
+      } else {
+        showToast('error', result.error || 'Failed to remove attendance');
+      }
+    } catch (err) {
+      console.error('Undo error:', err);
+      showToast('error', 'Error updating attendance');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Delete participant
+  const handleDeleteParticipant = async (participantId: string, participantName: string) => {
+    try {
+      setLoading(true);
+      const res = await fetch(`/api/registrations/${participantId}`, {
+        method: 'DELETE',
+      });
+
+      if (res.ok) {
+        showToast('success', `Deleted ${participantName}`);
+        setDeleteModalParticipant(null);
+        if (activeCandidate?.id === participantId) {
+          setActiveCandidate(null);
+        }
+        loadParticipants();
+      } else {
+        const data = await res.json();
+        showToast('error', data.error || 'Failed to delete');
+      }
+    } catch (err) {
+      console.error('Delete error:', err);
+      showToast('error', 'Error deleting participant');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Open Edit Modal
+  const openEditModal = (p: Participant) => {
+    setEditModalParticipant(p);
+    setEditForm({
+      name: p.name || '',
+      phone: p.phone || '',
+      college: p.college || '',
+      department: p.department || '',
+      isVerified: p.isVerified,
+      isEntered: p.isEntered,
+    });
+  };
+
+  // Save Edit Form
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editModalParticipant) return;
+
+    try {
+      setLoading(true);
+      const res = await fetch(`/api/registrations/${editModalParticipant.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          phone: editForm.phone.trim(),
+          college: editForm.college.trim(),
+          department: editForm.department.trim(),
+          isVerified: editForm.isVerified,
+          isEntered: editForm.isEntered,
+        }),
+      });
+
+      if (res.ok) {
+        showToast('success', `Updated ${editForm.name}`);
+        setEditModalParticipant(null);
+        loadParticipants();
+
+        if (activeCandidate?.id === editModalParticipant.id) {
+          setActiveCandidate((prev) => prev ? {
+            ...prev,
+            name: editForm.name,
+            phone: editForm.phone,
+            college: editForm.college,
+            department: editForm.department,
+            isVerified: editForm.isVerified,
+            isEntered: editForm.isEntered,
+          } : null);
+        }
+      } else {
+        const data = await res.json();
+        showToast('error', data.error || 'Failed to update');
+      }
+    } catch (err) {
+      console.error('Update error:', err);
+      showToast('error', 'Error updating participant');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Save Add Form
+  const handleSaveAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addForm.name.trim() || !addForm.college.trim() || !addForm.phone.trim()) {
+      showToast('error', 'Name, College, and Phone are required.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const res = await fetch('/api/registrations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: addForm.name.trim(),
+          phone: addForm.phone.trim(),
+          college: addForm.college.trim(),
+          department: addForm.department.trim(),
+          year: addForm.year,
+          isVerified: addForm.isVerified,
+          isEntered: addForm.markPresent,
+          amount: 250,
+          paymentUtr: addForm.isVerified ? 'CASH' : 'PENDING',
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        const created = data.registration;
+        const displayId = created.participantId || (created.participantNumber ? `TB${String(created.participantNumber).padStart(3, '0')}` : 'TB');
+        showToast('success', `Added ${created.name} (${displayId})!`);
+        setAddModalOpen(false);
+        setAddForm({
+          name: '',
+          phone: '',
+          college: '',
+          department: 'IT',
+          year: '3rd Year',
+          isVerified: true,
+          markPresent: true,
+        });
+        loadParticipants();
+      } else {
+        showToast('error', data.error || 'Failed to add participant');
+      }
+    } catch (err) {
+      console.error('Add error:', err);
+      showToast('error', 'Error adding participant');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Stats calculation
+  const stats = useMemo(() => {
+    const total = participants.length;
+    const present = participants.filter((p) => p.isEntered).length;
+    const absent = total - present;
+    const percent = total > 0 ? Math.round((present / total) * 100) : 0;
+    return { total, present, absent, percent };
+  }, [participants]);
+
+  // Filtered participants list for CRUD tab
+  const filteredList = useMemo(() => {
+    return participants.filter((p) => {
+      const q = searchQuery.toLowerCase().trim();
+      const pId = (p.participantId || (p.participantNumber ? `TB${String(p.participantNumber).padStart(3, '0')}` : '')).toLowerCase();
+
+      if (q) {
+        const matches =
+          p.name.toLowerCase().includes(q) ||
+          pId.includes(q) ||
+          p.college.toLowerCase().includes(q) ||
+          p.phone.includes(q);
+        if (!matches) return false;
+      }
+
+      if (filterStatus === 'present' && !p.isEntered) return false;
+      if (filterStatus === 'absent' && p.isEntered) return false;
+
+      return true;
+    });
+  }, [participants, searchQuery, filterStatus]);
+
+  // Quick export
+  const handleExportCSV = () => {
+    const rows = filteredList.map((p) => {
+      const displayId = p.participantId || (p.participantNumber ? `TB${String(p.participantNumber).padStart(3, '0')}` : 'TB');
+      return {
+        'ID': displayId,
+        'Name': p.name,
+        'College': p.college,
+        'Phone': p.phone,
+        'Attendance': p.isEntered ? 'Present' : 'Absent',
+        'Check-in Time': p.enteredAt ? formatTimeOnly(p.enteredAt) : '—',
+        'Fee': p.isVerified ? 'Paid' : 'Pending',
+      };
+    });
+    exportToCSV(`Attendance_${new Date().toISOString().slice(0, 10)}`, rows);
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6 pb-16 px-2 sm:px-4">
+
+      {/* 1. Header with clear counter & tab switcher */}
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
+              <UserCheck className="w-5 h-5" />
+            </div>
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900">
               Attendance Station
             </h1>
-            <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-mono font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0 flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 pulse-dot"></span>
-              Live
-            </span>
           </div>
-          <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 truncate hidden xs:block">
-            Participant ID (TB001...) or Live QR scanner
-          </p>
+
         </div>
 
-        {/* Auto Attendance Toggle */}
-        <button
-          onClick={() => setAutoCheckIn(!autoCheckIn)}
-          className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold border transition-all active:scale-95 ${
-            autoCheckIn
-              ? 'bg-emerald-50 text-emerald-700 border-emerald-300 shadow-xs'
-              : 'bg-slate-100 text-slate-500 border-slate-200'
-          }`}
-        >
-          <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-          <span>Auto: {autoCheckIn ? 'ON' : 'OFF'}</span>
-        </button>
-      </div>
-
-      {/* Main Grid: Input Station (ID or QR) + Live Attendee Card */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6">
-        
-        {/* Left 7 Cols: Mode Switcher + Active Input View */}
-        <div className="lg:col-span-7 space-y-3 sm:space-y-4">
-          
-          {/* TWO PRIMARY OPTIONS SWITCHER TABS */}
-          <div className="bg-slate-100 p-1 sm:p-1.5 rounded-xl sm:rounded-2xl border border-slate-200 grid grid-cols-2 gap-1.5 sm:gap-2 shadow-xs">
-            <button
-              type="button"
-              onClick={() => {
-                setAttendanceMode('id');
-                if (scannerActive) stopCamera();
-              }}
-              className={`flex items-center justify-center gap-1.5 py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg sm:rounded-xl text-xs sm:text-sm font-black transition-all ${
-                attendanceMode === 'id'
-                  ? 'bg-white text-blue-700 shadow-xs border border-slate-200'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-              }`}
-            >
-              <Hash className="w-4 h-4 text-blue-600 shrink-0" />
-              <span className="truncate">
-                <span className="sm:hidden">Enter ID</span>
-                <span className="hidden sm:inline">Enter Participant ID</span>
-              </span>
-              <span className="hidden sm:inline-block px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-mono">
-                TB001...
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setAttendanceMode('qr');
-                if (!scannerActive) startCamera();
-              }}
-              className={`flex items-center justify-center gap-1.5 py-2.5 sm:py-3 px-2 sm:px-4 rounded-lg sm:rounded-xl text-xs sm:text-sm font-black transition-all ${
-                attendanceMode === 'qr'
-                  ? 'bg-white text-emerald-700 shadow-xs border border-slate-200'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
-              }`}
-            >
-              <QrCode className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span className="truncate">
-                <span className="sm:hidden">Scan QR</span>
-                <span className="hidden sm:inline">Scan QR Code</span>
-              </span>
-              <span className="hidden sm:inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-mono">
-                Camera
-              </span>
-            </button>
+        {/* Counter Pill & Tabs */}
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+          <div className="px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800 flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>{stats.present} / {stats.total} Present ({stats.percent}%)</span>
           </div>
 
-          {/* OPTION 1: PARTICIPANT ID ENTRY CARD */}
-          {attendanceMode === 'id' && (
-            <div className="bg-white p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border-2 border-blue-200 shadow-xs space-y-3 sm:space-y-4 animate-fadeIn">
-              <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-black shrink-0 text-xs sm:text-sm">
-                    #
-                  </div>
-                  <div className="min-w-0">
-                    <h2 className="text-xs sm:text-sm font-black text-slate-900 truncate">
-                      Participant ID Entry
-                    </h2>
-                    <p className="text-[10px] sm:text-[11px] text-slate-500 truncate hidden xs:block">
-                      Type attendee master ID to record attendance
-                    </p>
-                  </div>
-                </div>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
-                  Option 1
-                </span>
-              </div>
+          <div className="bg-slate-100 p-1 rounded-xl border border-slate-200 flex items-center gap-1">
+            <button
+              onClick={() => setActiveTab('station')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'station'
+                  ? 'bg-white text-emerald-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+                }`}
+            >
+              Check-in
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab('list');
+                loadParticipants();
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${activeTab === 'list'
+                  ? 'bg-white text-blue-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+                }`}
+            >
+              Manage ({stats.total})
+            </button>
+          </div>
+        </div>
+      </div>
 
-              <form onSubmit={handleIdSubmit} className="space-y-3">
-                <div>
-                  <label className="block text-[11px] sm:text-xs font-bold text-slate-700 mb-1">
-                    Participant ID / Number
-                  </label>
-                  <div className="relative">
-                    <input
-                      ref={idInputRef}
-                      type="text"
-                      value={participantIdInput}
-                      onChange={(e) => {
-                        // Normalize to uppercase immediately — tb001 and TB001 are the same
-                        setParticipantIdInput(e.target.value.toUpperCase());
+      {/* ===================================================================== */}
+      {/* TAB 1: SIMPLE CHECK-IN STATION                                       */}
+      {/* ===================================================================== */}
+      {activeTab === 'station' && (
+        <div className="space-y-4">
+
+          {/* Unified Input Card */}
+          <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+
+            <form onSubmit={handleIdSubmit} className="space-y-3">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
+                Enter Participant ID or Number:
+              </label>
+
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    placeholder="e.g. TB001, or simply 1, 2, 3..."
+                    value={idInput}
+                    onChange={(e) => setIdInput(e.target.value.toUpperCase())}
+                    className="w-full px-4 py-3 sm:py-3.5 rounded-xl bg-slate-50 border-2 border-slate-200 focus:border-emerald-500 focus:bg-white text-base sm:text-lg font-mono font-bold text-slate-900 placeholder-slate-400 focus:outline-none transition-all uppercase"
+                    disabled={loading}
+                    autoFocus
+                  />
+                  {idInput && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIdInput('');
+                        inputRef.current?.focus();
                       }}
-                      autoCapitalize="characters"
-                      autoComplete="off"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      placeholder="e.g. TB001 or tb001 or 1, 2, 3..."
-                      className="w-full px-3.5 py-2.5 sm:py-3 rounded-xl bg-slate-50 border-2 border-slate-300 focus:border-blue-600 focus:bg-white text-base sm:text-lg font-mono font-bold text-slate-900 placeholder-slate-400 focus:outline-none transition-all shadow-inner uppercase"
-                      disabled={loading}
-                      autoFocus
-                    />
-                    {participantIdInput && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setParticipantIdInput('');
-                          idInputRef.current?.focus();
-                        }}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 px-2 py-1 text-[11px] font-bold text-slate-400 hover:text-slate-600 active:scale-95"
-                      >
-                        CLEAR
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-[10px] sm:text-[11px] text-slate-500 mt-1 flex items-center gap-1">
-                    <Sparkle className="w-3 h-3 text-blue-500 shrink-0" />
-                    <span className="truncate">
-                      Case-insensitive: <strong>tb001</strong> = <strong>TB001</strong>. Type <strong>1</strong> for TB001.
-                    </span>
-                  </p>
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold px-2 py-1"
+                    >
+                      CLEAR
+                    </button>
+                  )}
                 </div>
 
                 <button
                   type="submit"
-                  disabled={loading || !participantIdInput.trim()}
-                  className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 text-white font-black text-xs sm:text-sm shadow-md shadow-blue-500/20 transition-all flex items-center justify-center gap-2 active:scale-98"
+                  disabled={loading || !idInput.trim()}
+                  className="px-5 sm:px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-black text-sm shadow-sm transition-all flex items-center gap-1.5 shrink-0 active:scale-95"
                 >
-                  {loading ? (
-                    <>
-                      <Clock className="w-4 h-4 animate-spin" />
-                      <span>Checking In...</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5" />
-                      <span>Mark Attendance (Enter)</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </>
-                  )}
+                  <Search className="w-4 h-4" />
+                  <span className="hidden xs:inline">Check</span>
+                  <ArrowRight className="w-4 h-4" />
                 </button>
-              </form>
-
-              {/* Quick Preset Buttons for Rapid Testing/Lookup */}
-              <div className="pt-2.5 border-t border-slate-100">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                  Rapid Numeric Shortcuts:
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {['TB001', 'TB002', 'TB003', 'TB004', 'TB005'].map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => {
-                        setParticipantIdInput(preset);
-                        handleProcessScan(preset);
-                      }}
-                      className="px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-blue-50 hover:text-blue-700 border border-slate-200 text-[11px] font-mono font-semibold text-slate-700 transition-colors active:scale-95"
-                    >
-                      {preset}
-                    </button>
-                  ))}
-                </div>
               </div>
+            </form>
+
+            {/* Camera Scanner Toggle */}
+            <div className="pt-2 border-t border-slate-100 flex flex-col xs:flex-row xs:items-center justify-between gap-2">
+              <span className="text-xs text-slate-500">Want to scan physical badge or ticket?</span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (cameraOpen) {
+                    stopCamera();
+                  } else {
+                    startCamera();
+                  }
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${cameraOpen
+                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                  }`}
+              >
+                {cameraOpen ? (
+                  <>
+                    <CameraOff className="w-3.5 h-3.5" />
+                    <span>Close Camera</span>
+                  </>
+                ) : (
+                  <>
+                    <Camera className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Open Camera Scanner</span>
+                  </>
+                )}
+              </button>
             </div>
-          )}
 
-          {/* OPTION 2: QR SCANNER CARD */}
-          {attendanceMode === 'qr' && (
-            <div className="bg-white p-5 rounded-2xl border-2 border-emerald-200 shadow-sm relative animate-fadeIn space-y-4">
-              
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-black">
-                    <Camera className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-black text-slate-900">
-                      Live QR Code Gate Scanner
-                    </h2>
-                    <p className="text-[11px] text-slate-500">
-                      Scan digital or physical badges / tickets in front of camera
-                    </p>
-                  </div>
-                </div>
-
-                {scannerActive && (
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={toggleFacing}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-[11px] font-semibold text-slate-700 border border-slate-200"
-                      title="Switch camera"
-                    >
-                      <RotateCw className="w-3 h-3" />
-                      <span>Flip</span>
-                    </button>
-                    <button
-                      onClick={stopCamera}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 text-[11px] font-semibold border border-red-200"
-                    >
-                      <CameraOff className="w-3 h-3" />
-                      <span>Stop</span>
-                    </button>
-                  </div>
-                )}
+            {/* Embedded Live Camera Scanner (Always mounted in DOM to prevent element-not-found error) */}
+            <div className={`p-4 bg-slate-900 rounded-2xl space-y-3 animate-fadeIn ${cameraOpen ? 'block' : 'hidden'}`}>
+              <div className="flex items-center justify-between text-white text-xs px-1">
+                <span className="text-slate-300 font-medium">Align QR code within the square scan area</span>
+                <button
+                  type="button"
+                  onClick={flipCamera}
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold border border-slate-700 transition-colors"
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                  <span>Flip</span>
+                </button>
               </div>
-
-              {/* Video Container */}
-              <div className="relative w-full h-[260px] sm:h-[340px] md:h-[380px] rounded-2xl overflow-hidden bg-slate-900 border border-slate-300 flex items-center justify-center">
-                
-                <div id="qr-reader" className="w-full h-full object-cover"></div>
-
-                {!scannerActive && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-slate-900 text-white">
-                    <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-emerald-500/20 border border-emerald-400 flex items-center justify-center mb-3">
-                      <QrCode className="w-7 h-7 sm:w-8 sm:h-8 text-emerald-400" />
-                    </div>
-                    <h3 className="text-sm font-bold text-white mb-1">Attendance Camera Standby</h3>
-                    <p className="text-xs text-slate-300 max-w-xs mb-4">
-                      Hold the participant&apos;s ticket or PDF pass QR code in front of the lens.
-                    </p>
-                    <button
-                      onClick={startCamera}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all"
-                    >
-                      <Camera className="w-4 h-4" />
-                      <span>Start Camera Scanner</span>
-                    </button>
-                  </div>
-                )}
-
-                {scannerActive && (
-                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                    <div className="w-48 h-48 sm:w-64 sm:h-64 border-2 border-emerald-400 rounded-2xl relative shadow-2xl">
-                      <div className="absolute -top-1 -left-1 w-6 h-6 border-t-4 border-l-4 border-emerald-400 rounded-tl"></div>
-                      <div className="absolute -top-1 -right-1 w-6 h-6 border-t-4 border-r-4 border-emerald-400 rounded-tr"></div>
-                      <div className="absolute -bottom-1 -left-1 w-6 h-6 border-b-4 border-l-4 border-emerald-400 rounded-bl"></div>
-                      <div className="absolute -bottom-1 -right-1 w-6 h-6 border-b-4 border-r-4 border-emerald-400 rounded-br"></div>
-                      
-                      <div className="absolute left-2 right-2 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent scan-beam"></div>
-                    </div>
-                  </div>
-                )}
-
+              <div className="w-full max-w-[280px] sm:max-w-[340px] mx-auto aspect-square rounded-2xl overflow-hidden bg-black shadow-inner flex items-center justify-center border border-slate-800">
+                <div id="qr-camera-box" className="w-full h-full"></div>
               </div>
-
               {cameraError && (
-                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
-                  {cameraError}
-                </div>
+                <p className="text-xs text-rose-400 text-center">{cameraError}</p>
               )}
-
-              {/* Photo / Screenshot Upload Alternative */}
-              <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <span className="text-xs text-slate-500 text-center sm:text-left">
-                  Attendee showing screenshot / downloaded pass?
-                </span>
-                <label className="flex items-center justify-center w-full sm:w-auto gap-2 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer border border-slate-200 transition-all">
-                  <Upload className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Upload QR Image</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-
-            </div>
-          )}
-
-        </div>
-
-        {/* Right 5 Cols: Live Result Card & Attendance History */}
-        <div className="lg:col-span-5 space-y-3 sm:space-y-4">
-          
-          {/* Active Attendee Verification Card */}
-          <div className="bg-white p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-slate-200 shadow-xs min-h-[130px] sm:min-h-[300px] flex flex-col justify-between">
-            
-            <div>
-              <div className="flex items-center justify-between pb-2.5 border-b border-slate-100">
-                <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Attendee Verification Card
-                </span>
-                {loading && (
-                  <span className="text-[11px] sm:text-xs font-bold text-blue-600 animate-pulse flex items-center gap-1">
-                    <Clock className="w-3 h-3" /> Verifying...
-                  </span>
-                )}
-              </div>
-
-              {lastScanResult ? (
-                <div className="mt-3 sm:mt-4 space-y-3 sm:space-y-4 animate-fadeIn">
-                  
-                  {/* DUPLICATE ENTRY ALERT BANNER */}
-                  {lastScanResult.isDuplicate && (
-                    <div className="p-3.5 sm:p-4 rounded-xl bg-red-50 border-2 border-red-400 text-red-800 space-y-1.5 sm:space-y-2">
-                      <div className="flex items-center gap-2 font-black text-xs sm:text-sm text-red-700">
-                        <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 flex-shrink-0" />
-                        <span>ALREADY MARKED ATTENDANCE!</span>
-                      </div>
-                      <p className="text-[11px] sm:text-xs text-red-700 font-medium">
-                        This attendee was <strong>ALREADY CHECKED IN</strong> at:
-                      </p>
-                      <div className="font-mono text-xs sm:text-sm font-bold bg-white p-2 rounded-lg text-red-800 border border-red-200 flex items-center gap-2">
-                        <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-600" />
-                        {formatDate(lastScanResult.enteredAt)}
-                      </div>
-                      <p className="text-[10px] text-red-600">
-                        Notice: Duplicate check-in blocks reusing tickets or ID numbers across attendees.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* SUCCESS ENTRY BANNER */}
-                  {!lastScanResult.isDuplicate && lastScanResult.participant?.isEntered && (
-                    <div className="p-3 sm:p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-center gap-2.5 sm:gap-3">
-                      <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600 flex-shrink-0" />
-                      <div>
-                        <div className="font-black text-[11px] sm:text-xs text-emerald-800 uppercase tracking-wide">
-                          ATTENDANCE LOGGED &bull; PRESENT
-                        </div>
-                        <div className="text-[10px] sm:text-[11px] text-emerald-700 font-mono mt-0.5">
-                          Time: {formatTimeOnly(lastScanResult.participant.enteredAt)}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Participant Information Card */}
-                  {lastScanResult.participant && (
-                    <div className="p-3 sm:p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5 sm:space-y-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                            <span className="px-2 py-0.5 rounded-lg bg-blue-600 text-white font-mono font-black text-[11px] sm:text-xs shadow-xs">
-                              {lastScanResult.participant.participantId || (lastScanResult.participant.participantNumber ? `TB${String(lastScanResult.participant.participantNumber).padStart(3, '0')}` : 'TB---')}
-                            </span>
-                            <div className="text-sm sm:text-base font-black text-slate-900 truncate">
-                              {lastScanResult.participant.name}
-                            </div>
-                          </div>
-                          <div className="text-xs font-semibold text-blue-700 mt-1 truncate">
-                            {lastScanResult.participant.college}
-                          </div>
-                          <div className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 truncate">
-                            {lastScanResult.participant.department || 'IT'} &bull; {lastScanResult.participant.phone}
-                          </div>
-                        </div>
-
-                        {/* Payment Badge */}
-                        <span className={`px-2 py-0.5 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-black flex items-center gap-1 shrink-0 ${
-                          lastScanResult.participant.isVerified
-                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                            : 'bg-amber-100 text-amber-800 border border-amber-200'
-                        }`}>
-                          {lastScanResult.participant.isVerified ? (
-                            <>
-                              <ShieldCheck className="w-3 h-3 text-emerald-700" />
-                              <span>PAID ₹{lastScanResult.participant.amount || 200}</span>
-                            </>
-                          ) : (
-                            <>
-                              <ShieldAlert className="w-3 h-3 text-amber-700" />
-                              <span>PENDING</span>
-                            </>
-                          )}
-                        </span>
-                      </div>
-
-                      {/* Registered Events */}
-                      <div className="pt-2 border-t border-slate-200">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                          Registered Events:
-                        </span>
-                        <div className="flex flex-wrap gap-1">
-                          {[
-                            ...(lastScanResult.participant.techEventsList || []),
-                            ...(lastScanResult.participant.nonTechEventsList || []),
-                          ].map((ev, i) => (
-                            <span
-                              key={i}
-                              className="px-2 py-0.5 rounded text-[10px] font-bold bg-white text-slate-700 border border-slate-200"
-                            >
-                              {ev}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Team ID */}
-                      <div className="pt-1.5 border-t border-slate-200 flex justify-between text-[10px] font-mono text-slate-500">
-                        <span>TEAM / REF:</span>
-                        <span className="text-slate-800 font-bold truncate max-w-[150px]">
-                          {lastScanResult.participant.teamId || lastScanResult.participant.id}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Action Controls */}
-                  <div className="space-y-2 pt-1">
-                    {/* If Already Checked In or Duplicate: Show Remove Attendance & Override */}
-                    {lastScanResult.participant && (lastScanResult.participant.isEntered || lastScanResult.isDuplicate) && (
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        {lastScanResult.isDuplicate && (
-                          <button
-                            type="button"
-                            onClick={() => executeCheckIn(lastScanResult.participant!.id, true, false)}
-                            disabled={loading}
-                            className="flex-1 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-all shadow-xs flex items-center justify-center gap-1.5 active:scale-95"
-                          >
-                            <RotateCw className="w-3.5 h-3.5" />
-                            <span>Override &amp; Re-Mark</span>
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => executeUndo(lastScanResult.participant!.id, lastScanResult.participant!.name)}
-                          disabled={loading}
-                          className="flex-1 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border-2 border-rose-300 hover:border-rose-400 font-bold text-xs transition-all shadow-xs flex items-center justify-center gap-2 active:scale-95"
-                          title="Remove attendance for this participant (mark absent)"
-                        >
-                          <UserX className="w-4 h-4 text-rose-600 shrink-0" />
-                          <span>Remove Attendance</span>
-                        </button>
-                      </div>
-                    )}
-
-                    {/* If Not Checked In Yet */}
-                    {!lastScanResult.isDuplicate && !lastScanResult.participant?.isEntered && lastScanResult.participant && (
-                      <div className="space-y-2">
-                        <button
-                          type="button"
-                          onClick={() => executeCheckIn(lastScanResult.participant!.id, false, false)}
-                          disabled={loading}
-                          className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs transition-all shadow-xs flex items-center justify-center gap-2 active:scale-95"
-                        >
-                          <UserCheck className="w-4 h-4" />
-                          <span>Confirm Attendance (Mark Present)</span>
-                        </button>
-
-                        {!lastScanResult.participant?.isVerified && (
-                          <button
-                            type="button"
-                            onClick={() => executeCheckIn(lastScanResult.participant!.id, false, true)}
-                            disabled={loading}
-                            className="w-full py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 active:scale-95"
-                          >
-                            <ShieldCheck className="w-3.5 h-3.5" />
-                            <span>Verify Fee &amp; Mark Attendance</span>
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                </div>
-              ) : (
-                <div className="py-6 sm:py-12 flex flex-col items-center justify-center text-center text-slate-400 space-y-1 sm:space-y-2">
-                  <UserCheck className="w-8 h-8 sm:w-12 sm:h-12 text-slate-300" />
-                  <p className="text-xs font-semibold text-slate-600">Awaiting participant check-in...</p>
-                  <p className="text-[11px] text-slate-400">
-                    Enter Participant ID (e.g. TB001) or scan QR code to verify.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="mt-3 pt-2.5 border-t border-slate-100 text-[10px] sm:text-[11px] text-slate-500 flex justify-between">
-              <span>Attendance Station: Gate A</span>
-              <span className="text-emerald-600 font-semibold">&bull; Ready</span>
             </div>
 
           </div>
 
-          {/* Recent Attendance Session Log */}
-          <div className="bg-white p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border border-slate-200 shadow-xs space-y-2.5 sm:space-y-3">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-              <span>Recent Attendance this Session</span>
-              <span className="font-mono text-[11px] text-slate-500">{scanHistory.length} Recorded</span>
-            </div>
+          {/* ATTENDEE VERIFICATION & CONFIRMATION CARD */}
+          {activeCandidate && (
+            <div className="bg-white rounded-2xl border-2 border-emerald-400 shadow-lg p-5 sm:p-6 space-y-4 animate-scaleUp">
 
-            {scanHistory.length > 0 ? (
-              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                {scanHistory.map((item) => (
-                  <div
-                    key={item.id}
-                    className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs gap-2"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {item.participantId && (
-                          <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-mono font-bold text-[10px]">
-                            {item.participantId}
-                          </span>
-                        )}
-                        <span className="font-bold text-slate-900 truncate">{item.name}</span>
-                      </div>
-                      <div className="text-[10px] text-slate-500 mt-0.5 truncate">{item.college}</div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="text-right">
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${
-                          item.status === 'entered'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : item.status === 'duplicate'
-                            ? 'bg-red-100 text-red-800'
-                            : item.status === 'removed'
-                            ? 'bg-slate-200 text-slate-600'
-                            : 'bg-slate-200 text-slate-700'
-                        }`}>
-                          {item.status === 'entered' ? 'Present' : item.status === 'duplicate' ? 'Duplicate' : item.status === 'removed' ? 'Removed' : 'Error'}
-                        </span>
-                        <div className="text-[9px] font-mono text-slate-400 mt-0.5">{item.time}</div>
-                      </div>
-                      {item.status === 'entered' && (
-                        <button
-                          type="button"
-                          onClick={() => executeUndo(item.recordId || item.teamId, item.name)}
-                          title={`Remove attendance for ${item.name}`}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-all active:scale-95"
-                        >
-                          <UserX className="w-3.5 h-3.5" />
-                        </button>
+              {/* Duplicate Warning if Already Entered */}
+              {isDuplicateAlert && (
+                <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl text-amber-900 text-xs sm:text-sm flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                    <div>
+                      <strong>Already Marked Present earlier!</strong>
+                      {duplicateTime && (
+                        <div className="text-xs text-amber-700 mt-0.5">
+                          Time checked-in: {formatTimeOnly(duplicateTime)}
+                        </div>
                       )}
                     </div>
                   </div>
-                ))}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveAttendance(activeCandidate.id, activeCandidate.name)}
+                    className="px-3 py-1 bg-white hover:bg-rose-50 text-rose-700 border border-rose-300 font-bold rounded-lg text-xs shrink-0"
+                  >
+                    Mark Absent
+                  </button>
+                </div>
+              )}
+
+              {/* Success Badge if Marked Present */}
+              {!isDuplicateAlert && activeCandidate.isEntered && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs sm:text-sm flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-bold">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    <span>ATTENDANCE RECORDED &bull; PRESENT</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveAttendance(activeCandidate.id, activeCandidate.name)}
+                    className="text-xs text-rose-600 hover:text-rose-800 underline font-bold"
+                  >
+                    Undo
+                  </button>
+                </div>
+              )}
+
+              {/* Attendee Details */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="px-2.5 py-1 rounded-lg bg-blue-600 text-white font-mono font-black text-xs sm:text-sm">
+                      {activeCandidate.participantId || (activeCandidate.participantNumber ? `TB${String(activeCandidate.participantNumber).padStart(3, '0')}` : 'TB')}
+                    </span>
+                    <h2 className="text-lg sm:text-xl font-black text-slate-900">
+                      {activeCandidate.name}
+                    </h2>
+                  </div>
+                  <p className="text-sm font-semibold text-blue-700 mt-1">
+                    {activeCandidate.college}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {activeCandidate.department || 'IT'} &bull; {activeCandidate.phone}
+                  </p>
+                </div>
+
+                {/* Fee Status Badge */}
+                <div className="shrink-0">
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1 ${activeCandidate.isVerified
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      : 'bg-amber-100 text-amber-800 border border-amber-300'
+                    }`}>
+                    {activeCandidate.isVerified ? (
+                      <>
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Fee Paid (₹{activeCandidate.amount || 250})</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Fee Pending</span>
+                      </>
+                    )}
+                  </span>
+                </div>
               </div>
-            ) : (
-              <p className="text-xs text-slate-400 text-center py-4">
-                No attendance recorded yet.
-              </p>
-            )}
+
+              {/* ACTION PROMPT: Asking user to confirm attendance */}
+              {!activeCandidate.isEntered ? (
+                <div className="space-y-3 pt-1">
+                  <p className="text-xs font-bold text-slate-600 text-center">
+                    Please confirm: Is {activeCandidate.name} present at the gate?
+                  </p>
+
+                  <div className="flex flex-col sm:flex-row items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleConfirmAttendance(activeCandidate.id, false)}
+                      disabled={loading}
+                      className="w-full sm:flex-1 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm shadow-md transition-all flex items-center justify-center gap-2 active:scale-95"
+                    >
+                      <Check className="w-5 h-5" />
+                      <span>✓ Confirm Attendance (Mark Present)</span>
+                    </button>
+
+                    {!activeCandidate.isVerified && (
+                      <button
+                        type="button"
+                        onClick={() => handleConfirmAttendance(activeCandidate.id, true)}
+                        disabled={loading}
+                        className="w-full sm:w-auto px-4 py-3.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-sm transition-all"
+                      >
+                        Verify Fee &amp; Mark Present
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveCandidate(null)}
+                      className="w-full sm:w-auto px-4 py-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-xs text-slate-400">Ready for next participant</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveCandidate(null);
+                      inputRef.current?.focus();
+                    }}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
+                  >
+                    Clear Card
+                  </button>
+                </div>
+              )}
+
+            </div>
+          )}
+
+          {/* Quick Helper Note */}
+          {!activeCandidate && (
+            <div className="text-center py-6 text-slate-400 space-y-1">
+              <Clock className="w-6 h-6 mx-auto text-slate-300" />
+              <p className="text-xs font-medium">Type any Participant ID (e.g. TB001) or open the camera to verify.</p>
+              <p className="text-[11px] text-slate-400">The system will ask you to confirm before marking them present.</p>
+            </div>
+          )}
+
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* TAB 2: ATTENDEE LIST & SIMPLE CRUD                                   */}
+      {/* ===================================================================== */}
+      {activeTab === 'list' && (
+        <div className="space-y-4">
+
+          {/* Controls Bar: Search, Filters, Add Button */}
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5">
+
+              {/* Search Box */}
+              <div className="relative w-full sm:max-w-xs">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search name, TB ID, college..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-8 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={() => setAddModalOpen(true)}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all active:scale-95"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>+ Add Participant</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleExportCSV}
+                  className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl border border-slate-200 text-xs font-bold transition-all"
+                  title="Export to CSV"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={loadParticipants}
+                  disabled={loadingList}
+                  className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl border border-slate-200 transition-all disabled:opacity-50"
+                  title="Refresh"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loadingList ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+
+            </div>
+
+            {/* Filter Pills */}
+            <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100 text-xs">
+              <span className="text-slate-400 text-[11px] font-bold uppercase tracking-wider mr-1">Filter:</span>
+              <button
+                type="button"
+                onClick={() => setFilterStatus('all')}
+                className={`px-3 py-1 rounded-lg font-bold transition-all ${filterStatus === 'all'
+                    ? 'bg-slate-800 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+              >
+                All ({participants.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterStatus('present')}
+                className={`px-3 py-1 rounded-lg font-bold transition-all ${filterStatus === 'present'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                  }`}
+              >
+                Present ({stats.present})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterStatus('absent')}
+                className={`px-3 py-1 rounded-lg font-bold transition-all ${filterStatus === 'absent'
+                    ? 'bg-amber-600 text-white'
+                    : 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                  }`}
+              >
+                Absent ({stats.absent})
+              </button>
+            </div>
+          </div>
+
+          {/* Simple Clean Table & Mobile Cards */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            {/* Desktop Table View (Hidden on mobile) */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs sm:text-sm">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                    <th className="py-2.5 px-3 sm:px-4">ID</th>
+                    <th className="py-2.5 px-3 sm:px-4">Name &amp; College</th>
+                    <th className="py-2.5 px-3 sm:px-4">Status</th>
+                    <th className="py-2.5 px-3 sm:px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {loadingList ? (
+                    <tr>
+                      <td colSpan={4} className="py-8 text-center text-slate-400">
+                        <Clock className="w-5 h-5 animate-spin mx-auto mb-1 text-emerald-500" />
+                        <span>Loading list...</span>
+                      </td>
+                    </tr>
+                  ) : filteredList.length > 0 ? (
+                    filteredList.map((p) => {
+                      const displayId = p.participantId || (p.participantNumber ? `TB${String(p.participantNumber).padStart(3, '0')}` : 'TB');
+                      return (
+                        <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
+                          {/* TB ID */}
+                          <td className="py-2.5 px-3 sm:px-4 whitespace-nowrap">
+                            <span className="px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 font-mono font-bold text-xs border border-blue-200">
+                              {displayId}
+                            </span>
+                          </td>
+
+                          {/* Name & College */}
+                          <td className="py-2.5 px-3 sm:px-4">
+                            <div className="font-bold text-slate-900">{p.name}</div>
+                            <div className="text-[11px] text-slate-500 truncate max-w-[200px]">{p.college}</div>
+                          </td>
+
+                          {/* Attendance Status */}
+                          <td className="py-2.5 px-3 sm:px-4 whitespace-nowrap">
+                            {p.isEntered ? (
+                              <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold border border-emerald-200 inline-flex items-center gap-1">
+                                <Check className="w-3 h-3 text-emerald-600" />
+                                <span>Present</span>
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200">
+                                Absent
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Simple Actions (CRUD) */}
+                          <td className="py-2.5 px-3 sm:px-4 whitespace-nowrap text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {/* Toggle Attendance */}
+                              {p.isEntered ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveAttendance(p.id, p.name)}
+                                  className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all"
+                                  title="Mark Absent"
+                                >
+                                  Mark Absent
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveCandidate(p);
+                                    setActiveTab('station');
+                                  }}
+                                  className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-xs"
+                                  title="Confirm & Mark Present"
+                                >
+                                  Mark Present
+                                </button>
+                              )}
+
+                              {/* Edit Button */}
+                              <button
+                                type="button"
+                                onClick={() => openEditModal(p)}
+                                className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-all"
+                                title="Edit"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Delete Button */}
+                              <button
+                                type="button"
+                                onClick={() => setDeleteModalParticipant(p)}
+                                className="p-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 rounded-lg transition-all"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="py-8 text-center text-slate-400">
+                        No attendees match your search.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards View (Visible on screens < 640px) */}
+            <div className="block sm:hidden divide-y divide-slate-100">
+              {loadingList ? (
+                <div className="py-8 text-center text-slate-400 text-xs">
+                  <Clock className="w-5 h-5 animate-spin mx-auto mb-1 text-emerald-500" />
+                  <span>Loading list...</span>
+                </div>
+              ) : filteredList.length > 0 ? (
+                filteredList.map((p) => {
+                  const displayId = p.participantId || (p.participantNumber ? `TB${String(p.participantNumber).padStart(3, '0')}` : 'TB');
+                  return (
+                    <div key={p.id} className="p-3.5 bg-white space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 font-mono font-bold text-xs border border-blue-200">
+                          {displayId}
+                        </span>
+                        {p.isEntered ? (
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold border border-emerald-200 inline-flex items-center gap-1">
+                            <Check className="w-3 h-3 text-emerald-600" />
+                            <span>Present</span>
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200">
+                            Absent
+                          </span>
+                        )}
+                      </div>
+
+                      <div>
+                        <div className="font-bold text-slate-900 text-sm">{p.name}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">{p.college}</div>
+                        {p.phone && <div className="text-[11px] font-mono text-slate-400 mt-0.5">{p.phone}</div>}
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(p)}
+                            className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg active:scale-95"
+                            title="Edit"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteModalParticipant(p)}
+                            className="p-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 rounded-lg active:scale-95"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        {p.isEntered ? (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAttendance(p.id, p.name)}
+                            className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold active:scale-95"
+                          >
+                            Mark Absent
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveCandidate(p);
+                              setActiveTab('station');
+                            }}
+                            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs active:scale-95"
+                          >
+                            Mark Present
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="py-8 text-center text-slate-400 text-xs">
+                  No attendees match your search.
+                </div>
+              )}
+            </div>
+
+            <div className="bg-slate-50 p-2.5 border-t border-slate-200 text-slate-500 text-[11px] flex justify-between">
+              <span>Showing {filteredList.length} of {participants.length} attendees</span>
+            </div>
           </div>
 
         </div>
+      )}
 
-      </div>
+      {/* ===================================================================== */}
+      {/* MODAL: ADD PARTICIPANT                                                */}
+      {/* ===================================================================== */}
+      {addModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden">
+            <div className="p-4 bg-emerald-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                <UserPlus className="w-5 h-5" />
+                <span>Add New Participant</span>
+              </div>
+              <button onClick={() => setAddModalOpen(false)} className="text-white/80 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-      {/* Fixed Bottom-Right Toast Alert Notification */}
-      {toastMessage && (
+            <form onSubmit={handleSaveAdd} className="p-4 space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. John Doe"
+                  value={addForm.name}
+                  onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Phone Number *</label>
+                <input
+                  type="tel"
+                  required
+                  placeholder="e.g. 9876543210"
+                  value={addForm.phone}
+                  onChange={(e) => setAddForm({ ...addForm, phone: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">College *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. SXCCE"
+                  value={addForm.college}
+                  onChange={(e) => setAddForm({ ...addForm, college: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Department</label>
+                  <input
+                    type="text"
+                    value={addForm.department}
+                    onChange={(e) => setAddForm({ ...addForm, department: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-sm focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Year</label>
+                  <select
+                    value={addForm.year}
+                    onChange={(e) => setAddForm({ ...addForm, year: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-sm focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="1st Year">1st Year</option>
+                    <option value="2nd Year">2nd Year</option>
+                    <option value="3rd Year">3rd Year</option>
+                    <option value="4th Year">4th Year</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Toggles */}
+              <div className="p-3 bg-slate-50 rounded-xl space-y-2 border border-slate-200">
+                <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={addForm.isVerified}
+                    onChange={(e) => setAddForm({ ...addForm, isVerified: e.target.checked })}
+                    className="rounded text-emerald-600"
+                  />
+                  <span>Registration Fee Paid (₹250)</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer font-bold text-emerald-700">
+                  <input
+                    type="checkbox"
+                    checked={addForm.markPresent}
+                    onChange={(e) => setAddForm({ ...addForm, markPresent: e.target.checked })}
+                    className="rounded text-emerald-600"
+                  />
+                  <span>Mark Attendance (Present) Right Now</span>
+                </label>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-xs"
+                >
+                  Save Participant
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAddModalOpen(false)}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* MODAL: EDIT PARTICIPANT                                               */}
+      {/* ===================================================================== */}
+      {editModalParticipant && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden">
+            <div className="p-4 bg-blue-600 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2 font-bold text-sm">
+                <Edit className="w-5 h-5" />
+                <span>Edit Participant</span>
+              </div>
+              <button onClick={() => setEditModalParticipant(null)} className="text-white/80 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="p-4 space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-sm focus:outline-none focus:border-blue-500 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Phone</label>
+                <input
+                  type="tel"
+                  required
+                  value={editForm.phone}
+                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-sm focus:outline-none focus:border-blue-500 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">College</label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.college}
+                  onChange={(e) => setEditForm({ ...editForm, college: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-sm focus:outline-none focus:border-blue-500 font-medium"
+                />
+              </div>
+
+              {/* Status checkboxes */}
+              <div className="p-3 bg-slate-50 rounded-xl space-y-2 border border-slate-200">
+                <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={editForm.isVerified}
+                    onChange={(e) => setEditForm({ ...editForm, isVerified: e.target.checked })}
+                    className="rounded text-blue-600"
+                  />
+                  <span>Registration Fee Paid</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer font-bold text-emerald-700">
+                  <input
+                    type="checkbox"
+                    checked={editForm.isEntered}
+                    onChange={(e) => setEditForm({ ...editForm, isEntered: e.target.checked })}
+                    className="rounded text-emerald-600"
+                  />
+                  <span>Attendance: Present</span>
+                </label>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-xs"
+                >
+                  Save Changes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditModalParticipant(null)}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* MODAL: DELETE CONFIRMATION                                            */}
+      {/* ===================================================================== */}
+      {deleteModalParticipant && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-sm w-full p-5 text-center space-y-3">
+            <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <h3 className="font-black text-slate-900 text-sm">Delete Participant?</h3>
+            <p className="text-xs text-slate-500">
+              Are you sure you want to permanently delete <strong>{deleteModalParticipant.name}</strong>?
+            </p>
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => handleDeleteParticipant(deleteModalParticipant.id, deleteModalParticipant.name)}
+                disabled={loading}
+                className="flex-1 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl shadow-xs"
+              >
+                Delete
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteModalParticipant(null)}
+                className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast && (
         <div
           style={{
             position: 'fixed',
             bottom: '20px',
             right: '16px',
             zIndex: 2147483647,
-            maxWidth: '360px',
+            maxWidth: '340px',
             width: 'calc(100vw - 32px)',
           }}
           className="animate-slideInRight"
         >
           <div
-            className={`p-3.5 rounded-2xl shadow-2xl border flex items-center justify-between gap-3 text-white text-xs sm:text-sm font-semibold ${
-              toastMessage.type === 'success'
+            className={`p-3 rounded-2xl shadow-xl border flex items-center justify-between gap-2.5 text-white text-xs font-semibold ${toast.type === 'success'
                 ? 'bg-emerald-700 border-emerald-500'
-                : toastMessage.type === 'error'
-                ? 'bg-rose-700 border-rose-500'
-                : 'bg-slate-800 border-slate-700'
-            }`}
+                : toast.type === 'error'
+                  ? 'bg-rose-700 border-rose-500'
+                  : 'bg-slate-800 border-slate-700'
+              }`}
           >
             <div className="flex items-center gap-2 min-w-0">
-              {toastMessage.type === 'success' ? (
-                <CheckCircle2 className="w-5 h-5 text-emerald-200 shrink-0" />
-              ) : toastMessage.type === 'error' ? (
-                <AlertTriangle className="w-5 h-5 text-rose-200 shrink-0" />
+              {toast.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-200 shrink-0" />
+              ) : toast.type === 'error' ? (
+                <AlertTriangle className="w-4 h-4 text-rose-200 shrink-0" />
               ) : (
-                <Clock className="w-5 h-5 text-blue-200 shrink-0" />
+                <Clock className="w-4 h-4 text-blue-200 shrink-0" />
               )}
-              <span className="truncate">{toastMessage.text}</span>
+              <span className="truncate">{toast.text}</span>
             </div>
             <button
               type="button"
-              onClick={() => setToastMessage(null)}
-              className="p-1 text-white/70 hover:text-white shrink-0 active:scale-95"
+              onClick={() => setToast(null)}
+              className="p-1 text-white/70 hover:text-white shrink-0"
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
       )}
+
     </div>
   );
 }
