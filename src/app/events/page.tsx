@@ -75,7 +75,7 @@ export default function EventDashboardsPage() {
         }
       }
     } catch (err) {
-      console.error('Failed to load events:', err);
+      if (process.env.NODE_ENV === 'development') console.error('Failed to load events:', err);
     } finally {
       setLoading(false);
     }
@@ -129,7 +129,7 @@ export default function EventDashboardsPage() {
         sounds.playSuccess();
       }
     } catch (err) {
-      console.error(err);
+      if (process.env.NODE_ENV === 'development') console.error(err);
     } finally {
       setUpdatingConfig(false);
     }
@@ -164,7 +164,7 @@ export default function EventDashboardsPage() {
         sounds.playSuccess();
       }
     } catch (err) {
-      console.error(err);
+      if (process.env.NODE_ENV === 'development') console.error(err);
       fetchEvents();
     }
   };
@@ -240,7 +240,7 @@ export default function EventDashboardsPage() {
       }));
       await exportEventRosterDocx(activeEvent, docxParticipants);
     } catch (err) {
-      console.error('Failed to export DOCX:', err);
+      if (process.env.NODE_ENV === 'development') console.error('Failed to export DOCX:', err);
     } finally {
       setExportingDocx(false);
     }

@@ -165,7 +165,7 @@ export default function MasterSheetPage() {
         setAllParticipants(data.registrations || []);
       }
     } catch (err) {
-      console.error('Failed to load participants:', err);
+      if (process.env.NODE_ENV === 'development') console.error('Failed to load participants:', err);
     } finally {
       setLoading(false);
     }
@@ -325,7 +325,7 @@ export default function MasterSheetPage() {
         showToast('error', 'Delete Failed', 'Could not remove the participant');
       }
     } catch (err) {
-      console.error(err);
+      if (process.env.NODE_ENV === 'development') console.error(err);
       fetchParticipants();
       showToast('error', 'Delete Failed', 'Network error — please try again');
     }
@@ -355,7 +355,7 @@ export default function MasterSheetPage() {
         showToast('error', 'Batch Action Failed', 'Server returned an error — please retry');
       }
     } catch (err) {
-      console.error(err);
+      if (process.env.NODE_ENV === 'development') console.error(err);
       showToast('error', 'Batch Action Failed', 'Network error — please try again');
     }
   };
@@ -401,7 +401,7 @@ export default function MasterSheetPage() {
       const { exportMasterSheetDocx } = await import('@/lib/docxExport');
       await exportMasterSheetDocx(filteredParticipants);
     } catch (err) {
-      console.error('Failed to export DOCX:', err);
+      if (process.env.NODE_ENV === 'development') console.error('Failed to export DOCX:', err);
     } finally {
       setExportingDocx(false);
     }

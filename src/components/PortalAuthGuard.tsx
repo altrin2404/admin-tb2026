@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { Lock, Eye, EyeOff, ShieldCheck, ArrowRight, Home, AlertCircle } from 'lucide-react';
-import { isPortalAuthenticated, setPortalAuthenticated, lockPortal } from '@/lib/auth';
+import { Lock, Eye, EyeOff, ShieldCheck, ArrowRight, Home, AlertCircle, Loader2 } from 'lucide-react';
+import { isPortalAuthenticated, setPortalAuthenticated, lockPortal, checkServerSession } from '@/lib/auth';
 
 export default function PortalAuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -13,6 +13,7 @@ export default function PortalAuthGuard({ children }: { children: React.ReactNod
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const isGateway = pathname === '/';
 
@@ -20,11 +21,18 @@ export default function PortalAuthGuard({ children }: { children: React.ReactNod
     if (isGateway) {
       setAuthenticated(true);
     } else {
-      setAuthenticated(isPortalAuthenticated());
+      // Check local storage first for fast initial display
+      const localAuthed = isPortalAuthenticated();
+      setAuthenticated(localAuthed);
+
+      // Verify with server
+      checkServerSession().then((isValid) => {
+        setAuthenticated(isValid);
+      });
     }
   }, [pathname, isGateway]);
 
-  const handleUnlock = (e: React.FormEvent) => {
+  const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!passcode) {
       setError(true);
@@ -32,15 +40,25 @@ export default function PortalAuthGuard({ children }: { children: React.ReactNod
       return;
     }
 
-    const success = setPortalAuthenticated(passcode);
-    if (success) {
-      setAuthenticated(true);
-      setError(false);
-      setPasscode('');
-    } else {
+    setLoading(true);
+    setError(false);
+
+    try {
+      const success = await setPortalAuthenticated(passcode);
+      if (success) {
+        setAuthenticated(true);
+        setError(false);
+        setPasscode('');
+      } else {
+        setError(true);
+        setErrorMessage('Incorrect passcode. Please try again.');
+        setPasscode('');
+      }
+    } catch {
       setError(true);
-      setErrorMessage('Incorrect passcode. Please try again.');
-      setPasscode('');
+      setErrorMessage('Verification failed. Check network connection.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -77,12 +95,13 @@ export default function PortalAuthGuard({ children }: { children: React.ReactNod
               inputMode="numeric"
               pattern="[0-9]*"
               autoFocus
+              disabled={loading}
               value={passcode}
               onChange={(e) => {
                 setPasscode(e.target.value);
                 if (error) setError(false);
               }}
-              placeholder="Enter 6-digit passcode"
+              placeholder="Enter passcode"
               className={`w-full px-4 py-3 rounded-xl bg-slate-50 border text-center font-mono text-lg font-bold tracking-widest text-slate-900 placeholder-slate-400 placeholder:tracking-normal placeholder:font-sans placeholder:text-xs focus:outline-none focus:bg-white transition-all ${
                 error
                   ? 'border-red-400 ring-2 ring-red-200 bg-red-50/30'
@@ -108,17 +127,28 @@ export default function PortalAuthGuard({ children }: { children: React.ReactNod
           <div className="flex flex-col gap-2 pt-2">
             <button
               type="submit"
-              className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-all active:scale-95"
+              disabled={loading}
+              className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-all active:scale-95"
             >
-              <ShieldCheck className="w-4 h-4" />
-              <span>Unlock Access</span>
-              <ArrowRight className="w-4 h-4" />
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Verifying...</span>
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Unlock Access</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
 
             <button
               type="button"
-              onClick={() => {
-                lockPortal();
+              disabled={loading}
+              onClick={async () => {
+                await lockPortal();
                 router.push('/');
               }}
               className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs flex items-center justify-center gap-1.5 transition-all"

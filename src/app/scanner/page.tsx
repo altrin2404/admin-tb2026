@@ -121,21 +121,46 @@ export default function AttendancePage() {
   const html5QrCodeRef = useRef<unknown>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Safe fetch with 8s timeout and offline guard
+  const safeFetch = useCallback(async (url: string, options: RequestInit = {}, timeoutMs = 8000) => {
+    if (typeof window !== 'undefined' && !navigator.onLine) {
+      throw new Error('OFFLINE');
+    }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error('TIMEOUT');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }, []);
+
   // Load roster data
   const loadParticipants = useCallback(async () => {
     try {
       setLoadingList(true);
-      const res = await fetch('/api/registrations');
+      const res = await safeFetch('/api/registrations');
       const data = await res.json();
       if (res.ok) {
         setParticipants(data.registrations || []);
       }
-    } catch (err) {
-      console.error('Failed to load participants:', err);
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message === 'OFFLINE') {
+        showToast('error', '⚠️ Device is offline. Cannot sync roster.');
+      } else if (err instanceof Error && err.message === 'TIMEOUT') {
+        showToast('error', '⏳ Network timed out loading roster. Retrying...');
+      } else {
+        if (process.env.NODE_ENV === 'development') console.error('Failed to load participants:', err);
+      }
     } finally {
       setLoadingList(false);
     }
-  }, []);
+  }, [safeFetch, showToast]);
 
   useEffect(() => {
     loadParticipants();
@@ -192,7 +217,7 @@ export default function AttendancePage() {
         () => { }
       );
     } catch (err) {
-      console.error('Camera startup error:', err);
+      if (process.env.NODE_ENV === 'development') console.error('Camera startup error:', err);
       setCameraError('Unable to open camera. Please allow camera permissions or type the ID manually.');
       setCameraOpen(false);
     }
@@ -235,7 +260,7 @@ export default function AttendancePage() {
 
     try {
       setLoading(true);
-      const res = await fetch('/api/entry/scan', {
+      const res = await safeFetch('/api/entry/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ qrData: trimmed }),
@@ -262,9 +287,15 @@ export default function AttendancePage() {
         setIsDuplicateAlert(false);
         setDuplicateTime(null);
       }
-    } catch (err) {
-      console.error('Lookup error:', err);
-      showToast('error', 'Network error during lookup');
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message === 'OFFLINE') {
+        showToast('error', '⚠️ Device is offline. Reconnect to Wi-Fi to scan passes.');
+      } else if (err instanceof Error && err.message === 'TIMEOUT') {
+        showToast('error', '⏳ Network timed out (weak venue connection). Please tap to retry.');
+      } else {
+        if (process.env.NODE_ENV === 'development') console.error('Lookup error:', err);
+        showToast('error', 'Network error during lookup. Please retry.');
+      }
     } finally {
       setLoading(false);
     }
@@ -282,7 +313,7 @@ export default function AttendancePage() {
   const handleConfirmAttendance = async (participantId: string, verifyPayment: boolean = false) => {
     try {
       setLoading(true);
-      const res = await fetch('/api/entry/checkin', {
+      const res = await safeFetch('/api/entry/checkin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -312,12 +343,32 @@ export default function AttendancePage() {
 
         // Refresh list
         loadParticipants();
+      } else if (res.status === 409 || result.duplicate) {
+        playSound('warning');
+        setIsDuplicateAlert(true);
+        setDuplicateTime(result.enteredAt);
+        if (result.participant && activeCandidate) {
+          setActiveCandidate({
+            ...activeCandidate,
+            isEntered: true,
+            enteredAt: result.enteredAt,
+          });
+        }
+        showToast('error', result.error || 'DUPLICATE ENTRY ALERT: Already checked in!');
+      } else if (res.status === 429) {
+        showToast('error', result.error || 'Scan rate limit reached. Please wait a few seconds.');
       } else {
         showToast('error', result.error || 'Failed to record attendance');
       }
-    } catch (err) {
-      console.error('Checkin error:', err);
-      showToast('error', 'Error recording attendance');
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message === 'OFFLINE') {
+        showToast('error', '⚠️ Device is offline. Reconnect to Wi-Fi to confirm attendance.');
+      } else if (err instanceof Error && err.message === 'TIMEOUT') {
+        showToast('error', '⏳ Network timed out recording attendance. Please retry.');
+      } else {
+        if (process.env.NODE_ENV === 'development') console.error('Checkin error:', err);
+        showToast('error', 'Error recording attendance. Please retry.');
+      }
     } finally {
       setLoading(false);
     }
@@ -357,7 +408,7 @@ export default function AttendancePage() {
         showToast('error', result.error || 'Failed to remove attendance');
       }
     } catch (err) {
-      console.error('Undo error:', err);
+      if (process.env.NODE_ENV === 'development') console.error('Undo error:', err);
       showToast('error', 'Error updating attendance');
     } finally {
       setLoading(false);
@@ -384,7 +435,7 @@ export default function AttendancePage() {
         showToast('error', data.error || 'Failed to delete');
       }
     } catch (err) {
-      console.error('Delete error:', err);
+      if (process.env.NODE_ENV === 'development') console.error('Delete error:', err);
       showToast('error', 'Error deleting participant');
     } finally {
       setLoading(false);
@@ -445,7 +496,7 @@ export default function AttendancePage() {
         showToast('error', data.error || 'Failed to update');
       }
     } catch (err) {
-      console.error('Update error:', err);
+      if (process.env.NODE_ENV === 'development') console.error('Update error:', err);
       showToast('error', 'Error updating participant');
     } finally {
       setLoading(false);
@@ -498,7 +549,7 @@ export default function AttendancePage() {
         showToast('error', data.error || 'Failed to add participant');
       }
     } catch (err) {
-      console.error('Add error:', err);
+      if (process.env.NODE_ENV === 'development') console.error('Add error:', err);
       showToast('error', 'Error adding participant');
     } finally {
       setLoading(false);

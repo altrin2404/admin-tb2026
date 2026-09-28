@@ -98,7 +98,8 @@ export async function GET(request: Request) {
       colleges,
     });
   } catch (error) {
-    console.error('Error fetching registrations:', error);
+    const { logger } = await import('@/lib/logger');
+    logger.error('Error fetching registrations', error);
     return NextResponse.json(
       { error: 'Failed to fetch registrations' },
       { status: 500 }
@@ -109,6 +110,19 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    const { validateRegistrationPayload } = await import('@/lib/validation');
+
+    const validation = validateRegistrationPayload(body);
+    if (!validation.valid || !validation.data) {
+      return NextResponse.json(
+        { 
+          error: validation.errors[0] || 'Invalid registration details.',
+          errors: validation.errors 
+        },
+        { status: 400 }
+      );
+    }
+
     const {
       name,
       email,
@@ -116,6 +130,7 @@ export async function POST(request: Request) {
       college,
       department,
       year,
+      teamId: providedTeamId,
       teamName,
       technicalEvents,
       nonTechnicalEvents,
@@ -124,18 +139,11 @@ export async function POST(request: Request) {
       isVerified,
       isEntered,
       entryNotes,
-    } = body;
+    } = validation.data;
 
-    if (!name || !college || !phone) {
-      return NextResponse.json(
-        { error: 'Name, college, and phone number are required.' },
-        { status: 400 }
-      );
-    }
-
-    if (body.teamId) {
+    if (providedTeamId) {
       const existingTeamCount = await prisma.registration.count({
-        where: { teamId: body.teamId }
+        where: { teamId: providedTeamId }
       });
       if (existingTeamCount >= 2) {
         return NextResponse.json(
@@ -147,31 +155,28 @@ export async function POST(request: Request) {
 
     const timestamp = Date.now().toString().slice(-4);
     const randomHex = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const teamId = body.teamId || `TB26-${timestamp}-${randomHex}`;
-
-    const techList = Array.isArray(technicalEvents) ? technicalEvents : (technicalEvents ? [technicalEvents] : []);
-    const nonTechList = Array.isArray(nonTechnicalEvents) ? nonTechnicalEvents : (nonTechnicalEvents ? [nonTechnicalEvents] : []);
+    const teamId = providedTeamId || `TB26-${timestamp}-${randomHex}`;
 
     const created = await prisma.registration.create({
       data: {
         teamId,
         teamName: teamName || null,
-        name: name.trim(),
-        email: email?.trim() || `${phone}@spot.techbeta.in`,
-        phone: phone.trim(),
-        college: college.trim(),
-        department: department?.trim() || 'General',
-        year: year?.trim() || '1st Year',
-        event1: techList[0] || nonTechList[0] || 'GENBUILD',
-        event2: techList[1] || nonTechList[1] || null,
-        technicalEvents: JSON.stringify(techList),
-        nonTechnicalEvents: JSON.stringify(nonTechList),
-        paymentUtr: paymentUtr?.trim() || 'SPOT-CASH',
-        amount: amount || 250,
-        isVerified: isVerified ?? true,
-        isEntered: isEntered ?? false,
+        name,
+        email,
+        phone,
+        college,
+        department,
+        year,
+        event1: technicalEvents[0] || nonTechnicalEvents[0] || 'GENBUILD',
+        event2: technicalEvents[1] || nonTechnicalEvents[1] || null,
+        technicalEvents: JSON.stringify(technicalEvents),
+        nonTechnicalEvents: JSON.stringify(nonTechnicalEvents),
+        paymentUtr,
+        amount,
+        isVerified,
+        isEntered,
         enteredAt: isEntered ? new Date() : null,
-        entryNotes: entryNotes || 'Spot Registration',
+        entryNotes,
       },
     });
 
@@ -189,7 +194,8 @@ export async function POST(request: Request) {
       { status: 201 }
     );
   } catch (error) {
-    console.error('Error creating spot registration:', error);
+    const { logger } = await import('@/lib/logger');
+    logger.error('Error creating spot registration', error);
     return NextResponse.json(
       { error: 'Failed to create registration' },
       { status: 500 }

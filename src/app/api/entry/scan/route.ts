@@ -104,7 +104,8 @@ export async function POST(request: Request) {
       status: isDuplicate ? 'already_entered' : (primary.isVerified ? 'ready' : 'payment_pending'),
     });
   } catch (error) {
-    console.error('Scan lookup error:', error);
+    const { logger } = await import('@/lib/logger');
+    logger.error('Scan lookup error', error);
     return NextResponse.json({ error: 'Scan lookup failed' }, { status: 500 });
   }
 }

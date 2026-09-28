@@ -12,7 +12,8 @@ import {
   EyeOff,
   ShieldCheck,
   X,
-  AlertCircle
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import { setPortalAuthenticated, lockPortal } from '@/lib/auth';
 
@@ -35,12 +36,24 @@ export default function PortalGatewayPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [redirectTarget, setRedirectTarget] = useState<string | null>(null);
 
   // Lock session whenever user arrives or returns to gateway
   useEffect(() => {
     lockPortal();
     const handlePopState = () => lockPortal();
     window.addEventListener('popstate', handlePopState);
+
+    // Read redirect parameter if bounced from protected route
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const redirectParam = params.get('redirect');
+      if (redirectParam) {
+        setRedirectTarget(redirectParam);
+      }
+    }
+
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
@@ -80,7 +93,7 @@ export default function PortalGatewayPage() {
     },
   ];
 
-  // ALWAYS prompt for password every single time a card is clicked
+  // Open unlock modal
   const handleCardClick = (e: React.MouseEvent, opt: TargetOption) => {
     e.preventDefault();
     setSelectedTarget(opt);
@@ -89,7 +102,7 @@ export default function PortalGatewayPage() {
     setErrorMessage('');
   };
 
-  const handleUnlock = (e: React.FormEvent) => {
+  const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!passcode) {
       setError(true);
@@ -97,15 +110,25 @@ export default function PortalGatewayPage() {
       return;
     }
 
-    const success = setPortalAuthenticated(passcode);
-    if (success && selectedTarget) {
-      const destination = selectedTarget.href;
-      setSelectedTarget(null);
-      router.push(destination);
-    } else {
+    setLoading(true);
+    setError(false);
+
+    try {
+      const success = await setPortalAuthenticated(passcode);
+      if (success) {
+        const destination = redirectTarget || selectedTarget?.href || '/registrations';
+        setSelectedTarget(null);
+        router.push(destination);
+      } else {
+        setError(true);
+        setErrorMessage('Incorrect passcode. Please try again.');
+        setPasscode('');
+      }
+    } catch {
       setError(true);
-      setErrorMessage('Incorrect passcode. Please try again.');
-      setPasscode('');
+      setErrorMessage('Verification failed. Check network connection.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -158,34 +181,37 @@ export default function PortalGatewayPage() {
                 className={`pt-1 sm:pt-2 flex items-center gap-1.5 text-xs font-bold text-slate-500 group-hover:${opt.colorClass} transition-colors`}
               >
                 <span>{opt.ctaText}</span>
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Password Prompt Modal */}
+      {/* Security Passcode Modal */}
       {selectedTarget && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-fadeIn">
-          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-sm w-full p-5 sm:p-8 border border-slate-200 shadow-2xl text-center space-y-4 sm:space-y-5 animate-scaleUp relative max-h-[92vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl sm:rounded-3xl max-w-sm w-full p-5 sm:p-8 border border-slate-200 shadow-2xl text-center space-y-4 sm:space-y-5 animate-scaleUp max-h-[92vh] overflow-y-auto relative">
+            {/* Close Button */}
             <button
               onClick={() => setSelectedTarget(null)}
-              className="absolute right-3.5 top-3.5 p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-100 transition-colors"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
 
-            {/* Target Header Icon */}
+            {/* Target Icon */}
             <div
-              className={`w-14 h-14 sm:w-16 sm:h-16 mx-auto rounded-2xl ${selectedTarget.bgClass} ${selectedTarget.colorClass} border border-slate-200 flex items-center justify-center shadow-xs`}
+              className={`w-14 h-14 sm:w-16 sm:h-16 mx-auto rounded-2xl ${selectedTarget.bgClass} ${selectedTarget.colorClass} flex items-center justify-center shadow-xs`}
             >
               <Lock className="w-7 h-7 sm:w-8 sm:h-8" />
             </div>
 
-            {/* Target Header Info */}
+            {/* Title */}
             <div className="space-y-1">
-              <span className={`text-[10px] font-black uppercase tracking-wider ${selectedTarget.colorClass} ${selectedTarget.bgClass} px-2.5 py-0.5 rounded-full`}>
+              <span
+                className={`text-[10px] font-black uppercase tracking-wider ${selectedTarget.colorClass} ${selectedTarget.bgClass} px-2 py-0.5 rounded-full inline-block`}
+              >
                 {selectedTarget.title}
               </span>
               <h3 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight pt-1">
@@ -204,12 +230,13 @@ export default function PortalGatewayPage() {
                   inputMode="numeric"
                   pattern="[0-9]*"
                   autoFocus
+                  disabled={loading}
                   value={passcode}
                   onChange={(e) => {
                     setPasscode(e.target.value);
                     if (error) setError(false);
                   }}
-                  placeholder="Enter 6-digit passcode"
+                  placeholder="Enter passcode"
                   className={`w-full px-4 py-3 rounded-xl bg-slate-50 border text-center font-mono text-lg font-bold tracking-widest text-slate-900 placeholder-slate-400 placeholder:tracking-normal placeholder:font-sans placeholder:text-xs focus:outline-none focus:bg-white transition-all ${
                     error
                       ? 'border-red-400 ring-2 ring-red-200 bg-red-50/30'
@@ -235,15 +262,26 @@ export default function PortalGatewayPage() {
               <div className="flex flex-col gap-2 pt-1 sm:pt-2">
                 <button
                   type="submit"
-                  className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-all active:scale-95"
+                  disabled={loading}
+                  className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-xs transition-all active:scale-95"
                 >
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Unlock &amp; Proceed</span>
-                  <ArrowRight className="w-4 h-4" />
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Verifying...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>Unlock &amp; Proceed</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </button>
 
                 <button
                   type="button"
+                  disabled={loading}
                   onClick={() => setSelectedTarget(null)}
                   className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-all"
                 >

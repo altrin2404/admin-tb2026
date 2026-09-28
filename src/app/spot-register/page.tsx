@@ -44,6 +44,12 @@ export default function SpotRegisterPage() {
       return;
     }
 
+    const cleanPhone = formData.phone.replace(/\D/g, '');
+    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+      setError('Please enter a valid 10-digit mobile number starting with 6, 7, 8, or 9.');
+      return;
+    }
+
     try {
       setLoading(true);
       setError('');
@@ -208,8 +214,9 @@ export default function SpotRegisterPage() {
                 <input
                   type="tel"
                   required
+                  maxLength={10}
                   value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/\D/g, '') })}
                   placeholder="e.g. 9876543210"
                   className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white font-mono"
                 />

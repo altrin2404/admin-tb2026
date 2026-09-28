@@ -136,7 +136,7 @@ export default function RegistrationsPage() {
       const res = await fetch('/api/registrations');
       const data = await res.json();
       if (res.ok) setAllParticipants(data.registrations || []);
-    } catch (err) { console.error(err); } finally { if (!isBackground) setLoading(false); }
+    } catch (err) { if (process.env.NODE_ENV === 'development') console.error(err); } finally { if (!isBackground) setLoading(false); }
   };
 
   useEffect(() => {

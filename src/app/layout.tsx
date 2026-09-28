@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import TopNav from "@/components/TopNav";
 import PortalAuthGuard from "@/components/PortalAuthGuard";
+import NetworkStatusBanner from "@/components/NetworkStatusBanner";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -23,6 +24,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-slate-50 text-slate-900 min-h-screen flex flex-col antialiased selection:bg-blue-100 selection:text-blue-900">
+        <NetworkStatusBanner />
         <TopNav />
         <main className="flex-1 w-full max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8 py-3 sm:py-6 lg:py-8 pb-16 sm:pb-8 safe-bottom">
           <PortalAuthGuard>

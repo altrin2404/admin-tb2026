@@ -20,8 +20,9 @@ export async function POST(request: Request) {
       });
 
       const { triggerVerificationEmail } = await import('@/lib/email');
+      const { logger } = await import('@/lib/logger');
       recordsToVerify.forEach((record) => {
-        triggerVerificationEmail(record).catch((e) => console.error('Batch email trigger error:', e));
+        triggerVerificationEmail(record).catch((e) => logger.error('Batch email trigger error', e));
       });
 
       return NextResponse.json({ message: `Successfully verified ${ids.length} registrations and queued confirmation emails` });
@@ -60,7 +61,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (error) {
-    console.error('Batch action error:', error);
+    const { logger } = await import('@/lib/logger');
+    logger.error('Batch action error', error);
     return NextResponse.json({ error: 'Batch action failed' }, { status: 500 });
   }
 }

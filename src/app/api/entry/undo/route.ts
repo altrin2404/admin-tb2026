@@ -39,7 +39,8 @@ export async function POST(request: Request) {
       participant: updated,
     });
   } catch (error) {
-    console.error('Undo entry error:', error);
+    const { logger } = await import('@/lib/logger');
+    logger.error('Undo entry error', error);
     return NextResponse.json({ error: 'Failed to undo check-in' }, { status: 500 });
   }
 }

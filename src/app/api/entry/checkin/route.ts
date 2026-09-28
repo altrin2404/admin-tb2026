@@ -10,25 +10,12 @@ export async function POST(request: Request) {
     }
 
     // Lookup participant
-    const target = id 
+    const target = id
       ? await prisma.registration.findUnique({ where: { id } })
       : await prisma.registration.findFirst({ where: { teamId } });
 
     if (!target) {
       return NextResponse.json({ error: 'Participant not found.' }, { status: 404 });
-    }
-
-    // Check for duplicate entry
-    if (target.isEntered && !forceOverride) {
-      return NextResponse.json(
-        {
-          duplicate: true,
-          error: 'DUPLICATE ENTRY ALERT: Participant already checked in!',
-          enteredAt: target.enteredAt,
-          participant: target,
-        },
-        { status: 409 }
-      );
     }
 
     const now = new Date();
@@ -41,16 +28,59 @@ export async function POST(request: Request) {
       updateData.isVerified = true;
     }
 
+    // -------------------------------------------------------------
+    // Case 1: Team Check-In
+    // -------------------------------------------------------------
     if (checkInTeam && target.teamId) {
-      // Check in all members of this team
-      await prisma.registration.updateMany({
-        where: { teamId: target.teamId },
+      if (!forceOverride) {
+        // Pre-check if any team member is already entered
+        const alreadyEntered = await prisma.registration.findFirst({
+          where: { teamId: target.teamId, isEntered: true },
+        });
+        if (alreadyEntered) {
+          return NextResponse.json(
+            {
+              duplicate: true,
+              error: `DUPLICATE ENTRY ALERT: Team member (${alreadyEntered.name}) already checked in!`,
+              enteredAt: alreadyEntered.enteredAt,
+              participant: alreadyEntered,
+            },
+            { status: 409 }
+          );
+        }
+      }
+
+      // Atomic conditional update on the team
+      const updateWhere = forceOverride
+        ? { teamId: target.teamId }
+        : { teamId: target.teamId, isEntered: false };
+
+      const batchResult = await prisma.registration.updateMany({
+        where: updateWhere,
         data: updateData,
       });
+
+      if (batchResult.count === 0 && !forceOverride) {
+        const fresh = await prisma.registration.findFirst({
+          where: { teamId: target.teamId },
+        });
+        return NextResponse.json(
+          {
+            duplicate: true,
+            error: 'DUPLICATE ENTRY ALERT: Team members already checked in!',
+            enteredAt: fresh?.enteredAt,
+            participant: fresh,
+          },
+          { status: 409 }
+        );
+      }
 
       const updatedTeam = await prisma.registration.findMany({
         where: { teamId: target.teamId },
       });
+
+      const { invalidateCache } = await import('@/lib/cache');
+      invalidateCache();
 
       return NextResponse.json({
         success: true,
@@ -61,10 +91,58 @@ export async function POST(request: Request) {
       });
     }
 
-    // Check in individual participant
-    const updated = await prisma.registration.update({
+    // -------------------------------------------------------------
+    // Case 2: Individual Check-In (ATOMIC CONDITIONAL UPDATE)
+    // -------------------------------------------------------------
+    if (!forceOverride) {
+      // 1. Initial lookup check
+      if (target.isEntered) {
+        return NextResponse.json(
+          {
+            duplicate: true,
+            error: 'DUPLICATE ENTRY ALERT: Participant already checked in!',
+            enteredAt: target.enteredAt,
+            participant: target,
+          },
+          { status: 409 }
+        );
+      }
+
+      // 2. ATOMIC LOCK: Update only if isEntered is STILL false in PostgreSQL
+      // This completely prevents race conditions from concurrent scans at different gates
+      const updateResult = await prisma.registration.updateMany({
+        where: {
+          id: target.id,
+          isEntered: false,
+        },
+        data: updateData,
+      });
+
+      if (updateResult.count === 0) {
+        // Concurrent scan slipped in at the exact same millisecond
+        const fresh = await prisma.registration.findUnique({
+          where: { id: target.id },
+        });
+        return NextResponse.json(
+          {
+            duplicate: true,
+            error: 'DUPLICATE ENTRY ALERT: Participant already checked in!',
+            enteredAt: fresh?.enteredAt || target.enteredAt,
+            participant: fresh || target,
+          },
+          { status: 409 }
+        );
+      }
+    } else {
+      // Forced coordinator override
+      await prisma.registration.update({
+        where: { id: target.id },
+        data: updateData,
+      });
+    }
+
+    const updated = await prisma.registration.findUnique({
       where: { id: target.id },
-      data: updateData,
     });
 
     const { invalidateCache } = await import('@/lib/cache');
@@ -77,7 +155,8 @@ export async function POST(request: Request) {
       enteredAt: now,
     });
   } catch (error) {
-    console.error('Check-in error:', error);
+    const { logger } = await import('@/lib/logger');
+    logger.error('Check-in error', error);
     return NextResponse.json({ error: 'Check-in failed' }, { status: 500 });
   }
 }

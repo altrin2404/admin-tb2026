@@ -101,7 +101,8 @@ export async function GET() {
 
     return NextResponse.json(statsPayload);
   } catch (error) {
-    console.error('Stats API error:', error);
+    const { logger } = await import('@/lib/logger');
+    logger.error('Stats API error', error);
     return NextResponse.json({ error: 'Failed to fetch statistics' }, { status: 500 });
   }
 }

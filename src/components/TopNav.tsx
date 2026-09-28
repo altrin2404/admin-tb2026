@@ -66,7 +66,7 @@ export default function TopNav() {
           
           {/* Logo & Portal Identity */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <Link href="/" onClick={() => lockPortal()} className="flex items-center gap-2 group min-w-0">
+            <Link href="/" onClick={async () => { await lockPortal(); }} className="flex items-center gap-2 group min-w-0">
               <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-xs sm:text-base shadow-sm shadow-blue-500/30 group-hover:scale-105 transition-transform shrink-0">
                 TB
               </div>
@@ -141,8 +141,8 @@ export default function TopNav() {
             {!isGateway && (
               <button
                 type="button"
-                onClick={() => {
-                  lockPortal();
+                onClick={async () => {
+                  await lockPortal();
                   router.push('/');
                 }}
                 title="Lock Portal Session"
@@ -202,9 +202,9 @@ export default function TopNav() {
 
             <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
                 setMobileMenuOpen(false);
-                lockPortal();
+                await lockPortal();
                 router.push('/');
               }}
               className="w-full flex items-center justify-between p-3 rounded-xl text-sm font-bold text-red-600 bg-red-50/50 hover:bg-red-50 border border-red-200 transition-all mt-2"

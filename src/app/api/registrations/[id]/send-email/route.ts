@@ -28,7 +28,8 @@ export async function POST(
       result,
     });
   } catch (error) {
-    console.error('Error dispatching email:', error);
+    const { logger } = await import('@/lib/logger');
+    logger.error('Error dispatching email', error);
     return NextResponse.json({ error: 'Failed to send confirmation email' }, { status: 500 });
   }
 }

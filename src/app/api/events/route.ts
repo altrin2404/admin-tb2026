@@ -22,7 +22,7 @@ function saveEventConfigs(configs: Record<string, string>) {
   try {
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(configs, null, 2));
   } catch (err) {
-    console.error('Failed to save event configs:', err);
+    // Silent in production
   }
 }
 
@@ -159,7 +159,8 @@ export async function GET() {
 
     return NextResponse.json(responsePayload);
   } catch (error) {
-    console.error('Events API error:', error);
+    const { logger } = await import('@/lib/logger');
+    logger.error('Events API error', error);
     return NextResponse.json({ error: 'Failed to fetch event data' }, { status: 500 });
   }
 }
@@ -184,7 +185,8 @@ export async function POST(request: Request) {
       configs,
     });
   } catch (error) {
-    console.error('Update event config error:', error);
+    const { logger } = await import('@/lib/logger');
+    logger.error('Update event config error', error);
     return NextResponse.json({ error: 'Failed to update event configuration' }, { status: 500 });
   }
 }
