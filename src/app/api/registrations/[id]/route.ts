@@ -89,9 +89,22 @@ export async function PUT(
       ? JSON.stringify(sanitizeEventList(body.nonTechnicalEvents))
       : existing.nonTechnicalEvents;
 
+    let nextPaymentStatus = body.paymentStatus !== undefined ? body.paymentStatus : existing.paymentStatus;
+    if (body.isVerified !== undefined) {
+      if (body.isVerified === true && (nextPaymentStatus === 'INITIALIZED' || nextPaymentStatus === 'PENDING')) {
+        nextPaymentStatus = 'PAID';
+      } else if (body.isVerified === false && nextPaymentStatus === 'PAID') {
+        nextPaymentStatus = 'PENDING';
+      }
+    }
+
+    const { formatParticipantId } = await import('@/lib/idGenerator');
+    const participantId = existing.participantId || formatParticipantId(existing.participantNumber || 1);
+
     const updated = await prisma.registration.update({
       where: { id },
       data: {
+        participantId,
         name: body.name !== undefined ? sanitizeString(body.name, 100) : existing.name,
         email,
         phone,
@@ -100,6 +113,7 @@ export async function PUT(
         year: body.year !== undefined ? sanitizeString(body.year, 50) : existing.year,
         teamName: body.teamName !== undefined ? sanitizeString(body.teamName, 100) : existing.teamName,
         paymentUtr: body.paymentUtr !== undefined ? sanitizeString(body.paymentUtr, 60) : existing.paymentUtr,
+        paymentStatus: nextPaymentStatus,
         amount: body.amount !== undefined ? validateAmount(body.amount, existing.amount || 250) : existing.amount,
         isVerified: body.isVerified !== undefined ? Boolean(body.isVerified) : existing.isVerified,
         isEntered: body.isEntered !== undefined ? Boolean(body.isEntered) : existing.isEntered,

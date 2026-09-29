@@ -16,8 +16,11 @@ export async function POST(request: Request) {
 
       await prisma.registration.updateMany({
         where: { id: { in: ids } },
-        data: { isVerified: true },
+        data: { isVerified: true, paymentStatus: 'PAID' },
       });
+
+      const { invalidateCache } = await import('@/lib/cache');
+      invalidateCache();
 
       const { triggerVerificationEmail } = await import('@/lib/email');
       const { logger } = await import('@/lib/logger');
@@ -31,8 +34,12 @@ export async function POST(request: Request) {
     if (action === 'unverify') {
       await prisma.registration.updateMany({
         where: { id: { in: ids } },
-        data: { isVerified: false },
+        data: { isVerified: false, paymentStatus: 'PENDING' },
       });
+
+      const { invalidateCache } = await import('@/lib/cache');
+      invalidateCache();
+
       return NextResponse.json({ message: `Successfully marked ${ids.length} registrations as unverified` });
     }
 

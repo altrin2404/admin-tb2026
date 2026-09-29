@@ -39,7 +39,7 @@ export async function GET(request: Request) {
         }
 
         const seqNum = reg.participantNumber || index + 1;
-        const participantId = reg.participantId || (reg.paymentStatus !== 'INITIALIZED' ? formatParticipantId(seqNum) : null);
+        const participantId = reg.participantId || formatParticipantId(seqNum);
 
         return {
           ...reg,
@@ -156,6 +156,7 @@ export async function POST(request: Request) {
     const timestamp = Date.now().toString().slice(-4);
     const randomHex = Math.random().toString(36).substring(2, 6).toUpperCase();
     const teamId = providedTeamId || `TB26-${timestamp}-${randomHex}`;
+    const paymentStatus = body.paymentStatus || (isVerified ? 'PAID' : (paymentUtr && paymentUtr !== 'N/A' && paymentUtr !== '' ? 'PAID' : 'PENDING'));
 
     const created = await prisma.registration.create({
       data: {
@@ -173,6 +174,7 @@ export async function POST(request: Request) {
         nonTechnicalEvents: JSON.stringify(nonTechnicalEvents),
         paymentUtr,
         amount,
+        paymentStatus,
         isVerified,
         isEntered,
         enteredAt: isEntered ? new Date() : null,

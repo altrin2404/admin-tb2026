@@ -151,18 +151,16 @@ export default function RegistrationsPage() {
   );
 
   const totalTeams = useMemo(() => {
-    const valid = allParticipants.filter((p) => p.paymentStatus !== 'INITIALIZED');
-    const teams = new Set(valid.map((p) => p.teamId).filter(Boolean));
+    const teams = new Set(allParticipants.map((p) => p.teamId).filter(Boolean));
     return teams.size;
   }, [allParticipants]);
 
   const stats = useMemo(() => {
-    const validParticipants = allParticipants.filter((p) => p.paymentStatus !== 'INITIALIZED');
-    const total = validParticipants.length;
-    const confirmed = validParticipants.filter((p) => p.isVerified).length;
+    const total = allParticipants.length;
+    const confirmed = allParticipants.filter((p) => p.isVerified).length;
     const pending = total - confirmed;
-    const totalAmount = validParticipants.reduce((s, p) => s + (p.amount || 250), 0);
-    const confirmedAmount = validParticipants.filter((p) => p.isVerified).reduce((s, p) => s + (p.amount || 250), 0);
+    const totalAmount = allParticipants.reduce((s, p) => s + (p.amount || 250), 0);
+    const confirmedAmount = allParticipants.filter((p) => p.isVerified).reduce((s, p) => s + (p.amount || 250), 0);
     const verifiedRate = total > 0 ? Math.round((confirmed / total) * 100) : 0;
     return { total, confirmed, pending, totalAmount, confirmedAmount, verifiedRate, totalTeams };
   }, [allParticipants, totalTeams]);
@@ -186,12 +184,9 @@ export default function RegistrationsPage() {
         if (!hasEvent) return false;
       }
 
-      // Hide initialized records unless the INITIALIZED filter is explicitly selected
-      if (selectedPaymentStatus !== 'INITIALIZED' && p.paymentStatus === 'INITIALIZED') return false;
-
       if (selectedPaymentStatus === 'verified' && !p.isVerified) return false;
       if (selectedPaymentStatus === 'unverified' && p.isVerified) return false;
-      if (selectedPaymentStatus === 'INITIALIZED' && !p.razorpayOrderId) return false;
+      if (selectedPaymentStatus === 'INITIALIZED' && p.paymentStatus !== 'INITIALIZED') return false;
       if (selectedPaymentStatus === 'PENDING' && p.paymentStatus !== 'PENDING') return false;
       if (selectedPaymentStatus === 'PAID' && p.paymentStatus !== 'PAID') return false;
       return true;
@@ -571,7 +566,9 @@ export default function RegistrationsPage() {
                     </td>
                     <td className="py-3 px-3 font-mono text-[11px]">
                       <span className="text-slate-800 font-medium">&#8377;{p.amount || 250}</span>
-                      <div className="text-[10px] text-slate-500 font-sans uppercase font-bold text-blue-600 mt-0.5">Razorpay</div>
+                      <div className="text-[10px] text-slate-500 font-sans uppercase font-bold text-blue-600 mt-0.5 truncate max-w-[100px]">
+                        {p.paymentUtr || (p.razorpayOrderId ? 'Razorpay' : 'Spot Cash')}
+                      </div>
                     </td>
                     <td className="py-3 px-3 text-center">
                       <button
@@ -642,7 +639,7 @@ export default function RegistrationsPage() {
                   </div>
                 )}
                 <div className="flex items-center justify-between text-xs py-2 px-3 bg-slate-50 rounded-xl border border-slate-200 mb-3">
-                  <div className="flex items-center gap-1.5"><span className="text-slate-500">Type:</span><span className="font-mono font-bold text-blue-600">RAZORPAY</span></div>
+                  <div className="flex items-center gap-1.5"><span className="text-slate-500">Type:</span><span className="font-mono font-bold text-blue-600 truncate max-w-[120px]">{p.paymentUtr || (p.razorpayOrderId ? 'RAZORPAY' : 'SPOT CASH')}</span></div>
                   <span className="font-bold">&#8377;{p.amount || 250}</span>
                 </div>
                 <button onClick={() => toggleVerified(p)} className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-[0.99] ${p.isVerified ? 'bg-emerald-600 text-white' : 'bg-amber-100 text-amber-900 border border-amber-300'}`}>
@@ -818,7 +815,7 @@ function PassModal({ participant, onClose, onSendEmail }: { participant: Partici
             <div className="text-[11px] text-slate-500">{participant.allEvents.join(', ') || 'Event Pass'}</div>
           </div>
           <div className="pt-2 border-t border-slate-200 flex justify-between text-[10px] font-mono font-bold">
-            <span>TYPE: RAZORPAY</span>
+            <span className="truncate max-w-[150px]">TYPE: {participant.paymentUtr || (participant.razorpayOrderId ? 'RAZORPAY' : 'SPOT CASH')}</span>
             <span className={participant.isVerified ? 'text-emerald-700' : 'text-amber-600'}>{participant.isVerified ? 'CONFIRMED' : 'PENDING'}</span>
           </div>
         </div>
