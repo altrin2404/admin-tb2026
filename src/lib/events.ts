@@ -39,7 +39,7 @@ export const TECHBETA_EVENTS: EventDefinition[] = [
     shortCode: 'IF',
     category: 'Technical',
     defaultType: 'Team (1-2)',
-    description: 'Pitch innovative technical ideas, novelty, approach, and potential impact.',
+    description: 'Idea Presentation: Pitch innovative technical ideas, novelty, approach, and potential impact.',
   },
 
   // ─── Non-Technical Events ─────────────────────────────────────────
@@ -68,7 +68,7 @@ export function getShortCode(eventName: string): string {
   if (clean.includes('genbuild') || clean.includes('gb')) return 'GB';
   if (clean.includes('verse') || clean.includes('ui-verse') || clean.includes('uv') || (clean.includes('ui') && !clean.includes('build'))) return 'UV';
   if (clean.includes('logic') || clean.includes('trap') || clean.includes('lt')) return 'LT';
-  if (clean.includes('forge') || clean.includes('idea') || clean.includes('if')) return 'IF';
+  if (clean.includes('forge') || clean.includes('idea') || clean.includes('presentation') || clean.includes('if')) return 'IF';
   if (clean.includes('brand') || clean.includes('blitz') || clean.includes('bb')) return 'BB';
   if (clean.includes('bid') || clean.includes('bnb')) return 'BNB';
 

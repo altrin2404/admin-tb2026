@@ -755,7 +755,7 @@ function RegistrationFormModal({
                 <option value="GENBUILD">GENBUILD</option>
                 <option value="UI-VERSE">UI-VERSE</option>
                 <option value="LOGIC TRAP">LOGIC TRAP</option>
-                <option value="IDEA FORGE">IDEA FORGE</option>
+                <option value="IDEA FORGE">IDEA FORGE (Idea Presentation)</option>
               </select>
             </div>
             <div>

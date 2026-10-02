@@ -271,7 +271,7 @@ export default function SpotRegisterPage() {
                   <option value="GENBUILD">GENBUILD (GB)</option>
                   <option value="UI-VERSE">UI-VERSE (UV)</option>
                   <option value="LOGIC TRAP">LOGIC TRAP (LT)</option>
-                  <option value="IDEA FORGE">IDEA FORGE (IF)</option>
+                  <option value="IDEA FORGE">IDEA FORGE (IF) — Idea Presentation</option>
                 </select>
               </div>
               <div>

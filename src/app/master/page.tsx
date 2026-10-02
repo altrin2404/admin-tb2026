@@ -505,7 +505,7 @@ export default function MasterSheetPage() {
                 <option value="GENBUILD">GENBUILD</option>
                 <option value="UI-VERSE">UI-VERSE</option>
                 <option value="LOGIC TRAP">LOGIC TRAP</option>
-                <option value="IDEA FORGE">IDEA FORGE</option>
+                <option value="IDEA FORGE">IDEA FORGE (Idea Presentation)</option>
                 <option value="BRAND BLITZ">BRAND BLITZ</option>
                 <option value="BID & BUILD">BID & BUILD</option>
               </select>
@@ -1207,7 +1207,7 @@ function ParticipantFormModal({
                 <option value="GENBUILD">GENBUILD (GB)</option>
                 <option value="UI-VERSE">UI-VERSE (UV)</option>
                 <option value="LOGIC TRAP">LOGIC TRAP (LT)</option>
-                <option value="IDEA FORGE">IDEA FORGE (IF)</option>
+                <option value="IDEA FORGE">IDEA FORGE (IF) — Idea Presentation</option>
               </select>
             </div>
             <div>
