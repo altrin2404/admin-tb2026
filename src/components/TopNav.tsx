@@ -4,14 +4,10 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { 
-  LayoutDashboard, 
   Users, 
   Trophy, 
   QrCode, 
   UserPlus, 
-  Clock, 
-  Database,
-  ArrowLeftRight,
   Menu,
   X,
   ClipboardList,
@@ -22,26 +18,7 @@ import { lockPortal } from '@/lib/auth';
 export default function TopNav() {
   const pathname = usePathname();
   const router = useRouter();
-  const [time, setTime] = useState<string>('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  useEffect(() => {
-    const update = () => {
-      const now = new Date();
-      setTime(
-        now.toLocaleTimeString('en-IN', {
-          timeZone: 'Asia/Kolkata',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: true,
-        })
-      );
-    };
-    update();
-    const interval = setInterval(update, 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   // Close mobile menu whenever pathname changes
   useEffect(() => {
@@ -60,26 +37,26 @@ export default function TopNav() {
   ];
 
   return (
-    <header className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-xs">
+    <header className="sticky top-0 z-50 bg-white border-b border-slate-200">
       <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-13 sm:h-16">
           
           {/* Logo & Portal Identity */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <Link href="/" onClick={async () => { await lockPortal(); }} className="flex items-center gap-2 group min-w-0">
-              <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-xs sm:text-base shadow-sm shadow-blue-500/30 group-hover:scale-105 transition-transform shrink-0">
+            <Link href="/" onClick={async () => { await lockPortal(); }} className="flex items-center gap-2.5 group min-w-0">
+              <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-lg bg-slate-900 flex items-center justify-center text-white font-bold text-xs sm:text-sm shrink-0 tracking-wider">
                 TB
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <span className="font-extrabold text-slate-900 text-sm sm:text-base tracking-tight truncate group-hover:text-blue-600 transition-colors">
+                  <span className="font-bold text-slate-900 text-sm sm:text-base tracking-tight truncate group-hover:text-blue-600 transition-colors">
                     TechBETA 2.0
                   </span>
-                  <span className={`text-[9px] sm:text-[10px] uppercase font-bold tracking-wider px-1.5 sm:px-2 py-0.5 rounded-full shrink-0 ${
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded shrink-0 ${
                     isScannerMode
                       ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                       : isGateway
-                      ? 'bg-slate-100 text-slate-700 border border-slate-200'
+                      ? 'bg-slate-100 text-slate-600 border border-slate-200'
                       : 'bg-blue-50 text-blue-700 border border-blue-200'
                   }`}>
                     {isScannerMode ? 'Attendance' : isGateway ? 'Portal' : 'Admin'}
@@ -103,15 +80,15 @@ export default function TopNav() {
                   <Link
                     key={link.href}
                     href={link.href}
-                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
                       isActive
                         ? link.href === '/scanner'
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 shadow-xs'
-                          : 'bg-blue-50 text-blue-700 border border-blue-200 shadow-xs'
+                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                          : 'bg-blue-50 text-blue-800 border border-blue-200'
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
                     }`}
                   >
-                    <Icon className={`h-4 w-4 ${isActive ? (link.href === '/scanner' ? 'text-emerald-600' : 'text-blue-600') : 'text-slate-500'}`} />
+                    <Icon className={`h-4 w-4 ${isActive ? (link.href === '/scanner' ? 'text-emerald-700' : 'text-blue-700') : 'text-slate-400'}`} />
                     <span>{link.label}</span>
                   </Link>
                 );
@@ -121,22 +98,6 @@ export default function TopNav() {
 
           {/* Right Header Status Bar */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* Supabase Live Indicator (Visible on tablets & desktops) */}
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs text-slate-700">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <Database className="h-3.5 w-3.5 text-emerald-600" />
-              <span className="text-[11px] font-semibold text-slate-600">Live DB</span>
-            </div>
-
-            {/* Live Clock (Hidden on mobile phones to give space for hamburger button) */}
-            <div className="hidden md:flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-mono font-bold text-slate-700">
-              <Clock className="h-3.5 w-3.5 text-blue-600 shrink-0" />
-              <span className="text-xs">{time || '--:--'}</span>
-            </div>
-
             {/* Lock Portal Session Button */}
             {!isGateway && (
               <button
@@ -146,10 +107,10 @@ export default function TopNav() {
                   router.push('/');
                 }}
                 title="Lock Portal Session"
-                className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-700 border border-slate-200 hover:border-red-200 text-xs font-bold transition-all active:scale-95"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-red-700 text-xs font-semibold border border-slate-200 transition-colors"
               >
                 <Lock className="h-3.5 w-3.5 text-slate-500" />
-                <span className="hidden sm:inline">Lock</span>
+                <span className="hidden sm:inline">Lock Portal</span>
               </button>
             )}
 

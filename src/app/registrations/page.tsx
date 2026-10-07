@@ -7,7 +7,7 @@ import {
   Search, Download, RefreshCw, ShieldCheck, ShieldAlert,
   X, Phone, Mail, QrCode, Edit, Trash2, UserPlus, FileText, Printer,
   CheckCheck, AlertTriangle, Info, Trophy, Building, ArrowUpRight,
-  ChevronDown, ChevronUp, Sparkles, Filter
+  ChevronDown, ChevronUp, Filter
 } from 'lucide-react';
 import { formatDate, exportToCSV } from '@/lib/utils';
 import { TECHBETA_EVENTS, getShortCode } from '@/lib/events';
@@ -119,6 +119,8 @@ export default function RegistrationsPage() {
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [passModalParticipant, setPassModalParticipant] = useState<Participant | null>(null);
+  const [emailModalParticipant, setEmailModalParticipant] = useState<Participant | null>(null);
+  const [sendingEmail, setSendingEmail] = useState(false);
   const [exportingDocx, setExportingDocx] = useState(false);
 
   // ─ Toast State ─
@@ -145,25 +147,33 @@ export default function RegistrationsPage() {
     return () => clearInterval(interval);
   }, []);
 
+  const initializedCount = useMemo(() => {
+    return allParticipants.filter((p) => p.paymentStatus === 'INITIALIZED').length;
+  }, [allParticipants]);
+
+  const activeParticipants = useMemo(() => {
+    return allParticipants.filter((p) => p.paymentStatus !== 'INITIALIZED');
+  }, [allParticipants]);
+
   const collegeList = useMemo(() =>
-    Array.from(new Set(allParticipants.map((p) => p.college.trim()))).filter(Boolean).sort(),
-    [allParticipants]
+    Array.from(new Set(activeParticipants.map((p) => p.college.trim()))).filter(Boolean).sort(),
+    [activeParticipants]
   );
 
   const totalTeams = useMemo(() => {
-    const teams = new Set(allParticipants.map((p) => p.teamId).filter(Boolean));
+    const teams = new Set(activeParticipants.map((p) => p.teamId).filter(Boolean));
     return teams.size;
-  }, [allParticipants]);
+  }, [activeParticipants]);
 
   const stats = useMemo(() => {
-    const total = allParticipants.length;
-    const confirmed = allParticipants.filter((p) => p.isVerified).length;
+    const total = activeParticipants.length;
+    const confirmed = activeParticipants.filter((p) => p.isVerified).length;
     const pending = total - confirmed;
-    const totalAmount = allParticipants.reduce((s, p) => s + (p.amount || 250), 0);
-    const confirmedAmount = allParticipants.filter((p) => p.isVerified).reduce((s, p) => s + (p.amount || 250), 0);
+    const totalAmount = activeParticipants.reduce((s, p) => s + (p.amount || 250), 0);
+    const confirmedAmount = activeParticipants.filter((p) => p.isVerified).reduce((s, p) => s + (p.amount || 250), 0);
     const verifiedRate = total > 0 ? Math.round((confirmed / total) * 100) : 0;
-    return { total, confirmed, pending, totalAmount, confirmedAmount, verifiedRate, totalTeams };
-  }, [allParticipants, totalTeams]);
+    return { total, confirmed, pending, totalAmount, confirmedAmount, verifiedRate, totalTeams, initializedCount };
+  }, [activeParticipants, totalTeams, initializedCount]);
 
   const filteredParticipants = useMemo(() =>
     allParticipants.filter((p) => {
@@ -184,11 +194,20 @@ export default function RegistrationsPage() {
         if (!hasEvent) return false;
       }
 
-      if (selectedPaymentStatus === 'verified' && !p.isVerified) return false;
-      if (selectedPaymentStatus === 'unverified' && p.isVerified) return false;
-      if (selectedPaymentStatus === 'INITIALIZED' && p.paymentStatus !== 'INITIALIZED') return false;
-      if (selectedPaymentStatus === 'PENDING' && p.paymentStatus !== 'PENDING') return false;
-      if (selectedPaymentStatus === 'PAID' && p.paymentStatus !== 'PAID') return false;
+      if (selectedPaymentStatus === 'INITIALIZED') {
+        if (p.paymentStatus !== 'INITIALIZED') return false;
+      } else if (selectedPaymentStatus === 'verified') {
+        if (!p.isVerified) return false;
+      } else if (selectedPaymentStatus === 'unverified') {
+        if (p.isVerified || p.paymentStatus === 'INITIALIZED') return false;
+      } else if (selectedPaymentStatus === 'PAID') {
+        if (p.paymentStatus !== 'PAID') return false;
+      } else if (selectedPaymentStatus === 'all') {
+        // all includes initialized
+      } else {
+        // Default: Active registrations only (exclude INITIALIZED)
+        if (p.paymentStatus === 'INITIALIZED') return false;
+      }
       return true;
     }),
     [allParticipants, search, selectedCollege, selectedEvent, selectedPaymentStatus]
@@ -206,6 +225,17 @@ export default function RegistrationsPage() {
       }
     } catch {
       showToast('error', 'Email Failed', 'Network error — could not reach mail server');
+    }
+  };
+
+  const handleConfirmSendEmail = async () => {
+    if (!emailModalParticipant) return;
+    setSendingEmail(true);
+    try {
+      await sendConfirmationEmail(emailModalParticipant);
+    } finally {
+      setSendingEmail(false);
+      setEmailModalParticipant(null);
     }
   };
 
@@ -266,23 +296,23 @@ export default function RegistrationsPage() {
     <>
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
       <div className="space-y-6 animate-fadeIn">
-        {/* Header with Unified Dashboard & Registration Controls */}
+        {/* Header with Dashboard & Registration Controls */}
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1 flex-wrap">
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] sm:text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-200 flex items-center gap-1.5">
-                <Sparkles className="w-3 h-3 text-violet-600" />
-                Live Hub &amp; Operations
-              </span>
-              <span className="text-[11px] sm:text-xs text-slate-500 font-medium">TechBETA 2026 2.0</span>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[11px] sm:text-xs text-slate-500 font-medium">TechBETA 2026</span>
             </div>
             <div className="flex items-center gap-2.5">
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2.5">
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 flex items-center gap-2.5">
                 <ClipboardList className="w-6 h-6 text-violet-600" />
                 Registrations &amp; Dashboard
               </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-violet-50 text-violet-700 border border-violet-200">
-                {filteredParticipants.length} of {allParticipants.length}
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-violet-50 text-violet-700 border border-violet-200">
+                {selectedPaymentStatus === 'INITIALIZED'
+                  ? `${filteredParticipants.length} Initialized`
+                  : selectedPaymentStatus === 'all'
+                  ? `${filteredParticipants.length} of ${allParticipants.length} (All)`
+                  : `${filteredParticipants.length} of ${activeParticipants.length}`}
               </span>
             </div>
           </div>
@@ -290,7 +320,7 @@ export default function RegistrationsPage() {
           <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full lg:w-auto">
             <Link
               href="/spot-register"
-              className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold border border-slate-200 transition-all active:scale-95"
+              className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold border border-slate-200 transition-colors"
             >
               <UserPlus className="w-4 h-4 text-violet-600 shrink-0" />
               <span>Spot Reg</span>
@@ -298,7 +328,7 @@ export default function RegistrationsPage() {
 
             <Link
               href="/events"
-              className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold border border-amber-200 transition-all active:scale-95"
+              className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-semibold border border-amber-200 transition-colors"
             >
               <Trophy className="w-4 h-4 text-amber-600 shrink-0" />
               <span className="truncate">Event Dashboards</span>
@@ -306,7 +336,7 @@ export default function RegistrationsPage() {
 
             <button
               onClick={() => setIsAddingNew(true)}
-              className="col-span-2 sm:col-span-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold transition-all shadow-xs active:scale-95"
+              className="col-span-2 sm:col-span-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold transition-colors shadow-xs"
             >
               <UserPlus className="w-4 h-4 shrink-0" />
               <span>Add Participant</span>
@@ -315,7 +345,7 @@ export default function RegistrationsPage() {
             <div className="col-span-2 sm:col-span-1 flex items-center gap-1.5">
               <button
                 onClick={handleExportCSV}
-                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200 transition-all active:scale-95"
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200 transition-colors"
                 title="Export CSV"
               >
                 <Download className="w-4 h-4 text-slate-600 shrink-0" />
@@ -324,10 +354,10 @@ export default function RegistrationsPage() {
               <button
                 onClick={handleExportDocx}
                 disabled={exportingDocx}
-                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-violet-50 hover:bg-violet-100 text-violet-700 text-xs font-bold border border-violet-200 transition-all shadow-xs active:scale-95"
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-violet-50 hover:bg-violet-100 text-violet-700 text-xs font-semibold border border-violet-200 transition-colors shadow-xs"
                 title="Export Word Document"
               >
-                <FileText className={`w-4 h-4 text-violet-600 shrink-0 ${exportingDocx ? 'animate-bounce' : ''}`} />
+                <FileText className="w-4 h-4 text-violet-600 shrink-0" />
                 <span>{exportingDocx ? '...' : 'DOCX'}</span>
               </button>
               <button
@@ -413,6 +443,56 @@ export default function RegistrationsPage() {
           </div>
         </div>
 
+        {/* Initialized Notice / Context Banners */}
+        {initializedCount > 0 && selectedPaymentStatus !== 'INITIALIZED' && (
+          <div className="bg-amber-50/90 border border-amber-200 rounded-2xl p-3 sm:px-4 sm:py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs text-amber-900 shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center shrink-0">
+                <Clock className="w-4 h-4 text-amber-700" />
+              </div>
+              <div>
+                <span className="font-bold text-amber-900">
+                  {initializedCount} Checkout Attempt{initializedCount > 1 ? 's' : ''} Initialized
+                </span>
+                <span className="text-amber-700 ml-1.5 hidden sm:inline">
+                  &mdash; Filtered out from default active list. Available in the Initialized drop-down.
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => setSelectedPaymentStatus('INITIALIZED')}
+              className="self-start sm:self-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs transition-all active:scale-95 shrink-0"
+            >
+              <span>View Initialized</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {selectedPaymentStatus === 'INITIALIZED' && (
+          <div className="bg-amber-50 border border-amber-300 rounded-2xl p-3.5 sm:px-5 sm:py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 text-xs text-amber-950 shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-200 flex items-center justify-center shrink-0">
+                <Clock className="w-4 h-4 text-amber-800" />
+              </div>
+              <div>
+                <div className="font-extrabold text-amber-950 text-sm">
+                  Viewing Initialized Drop-Down ({filteredParticipants.length})
+                </div>
+                <div className="text-amber-800 text-[11px] mt-0.5">
+                  These records initiated Razorpay checkout on the website but have not confirmed payment.
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setSelectedPaymentStatus('')}
+              className="self-start sm:self-auto px-3.5 py-1.5 rounded-xl bg-white hover:bg-amber-100 text-amber-900 font-bold border border-amber-300 text-xs shadow-xs transition-all active:scale-95 shrink-0"
+            >
+              &larr; Back to Active Registrations
+            </button>
+          </div>
+        )}
+
         {/* Filters */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-2.5">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
@@ -455,13 +535,20 @@ export default function RegistrationsPage() {
             <select
               value={selectedPaymentStatus}
               onChange={(e) => setSelectedPaymentStatus(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs text-slate-800 focus:outline-none focus:border-violet-500 focus:bg-white"
+              className={`w-full px-3 py-2 rounded-xl text-xs font-semibold focus:outline-none focus:border-violet-500 focus:bg-white transition-all ${
+                selectedPaymentStatus === 'INITIALIZED'
+                  ? 'bg-amber-50 border-2 border-amber-400 text-amber-900'
+                  : 'bg-slate-50 border border-slate-300 text-slate-800'
+              }`}
             >
-              <option value="">All Verification Status</option>
+              <option value="">Active Registrations (Excl. Initialized)</option>
               <option value="verified">Verified (Confirmed)</option>
               <option value="unverified">Unverified (Pending)</option>
               <option value="PAID">Paid via Razorpay</option>
-              <option value="INITIALIZED">Initialized (Checkout opened)</option>
+              <option value="INITIALIZED">
+                Initialized ({initializedCount} in Checkout)
+              </option>
+              <option value="all">All Records (Inc. Initialized)</option>
             </select>
           </div>
 
@@ -481,9 +568,19 @@ export default function RegistrationsPage() {
                 </span>
               )}
               {selectedPaymentStatus && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200 text-[11px] font-bold">
-                  Status: {selectedPaymentStatus}
-                  <button onClick={() => setSelectedPaymentStatus('')} className="hover:text-blue-950">&times;</button>
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border ${
+                  selectedPaymentStatus === 'INITIALIZED'
+                    ? 'bg-amber-100 text-amber-900 border-amber-300'
+                    : 'bg-blue-50 text-blue-800 border-blue-200'
+                }`}>
+                  Status: {
+                    selectedPaymentStatus === 'INITIALIZED' ? `Initialized (${filteredParticipants.length})` :
+                    selectedPaymentStatus === 'verified' ? 'Verified' :
+                    selectedPaymentStatus === 'unverified' ? 'Unverified' :
+                    selectedPaymentStatus === 'PAID' ? 'Paid via Razorpay' :
+                    'All'
+                  }
+                  <button onClick={() => setSelectedPaymentStatus('')} className="hover:opacity-75 font-bold">&times;</button>
                 </span>
               )}
               {search && (
@@ -539,8 +636,15 @@ export default function RegistrationsPage() {
                   <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-3 px-3 text-center font-mono font-black text-slate-900 text-sm bg-slate-50/80">{index + 1}</td>
                     <td className="py-3 px-4 font-mono text-[11px]">
-                      <div className="inline-block px-2 py-0.5 rounded-md bg-violet-50 text-violet-800 font-bold border border-violet-200">
-                        {p.formattedParticipantId || `TB${String(p.participantNumber).padStart(3, '0')}`}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="inline-block px-2 py-0.5 rounded-md bg-violet-50 text-violet-800 font-bold border border-violet-200">
+                          {p.formattedParticipantId || `TB${String(p.participantNumber).padStart(3, '0')}`}
+                        </span>
+                        {p.paymentStatus === 'INITIALIZED' && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                            Initialized
+                          </span>
+                        )}
                       </div>
                       {p.teamId && <div className="text-[10px] text-slate-500 font-sans mt-0.5">{p.teamId}</div>}
                       {p.teamName && <div className="text-[10px] text-slate-400 font-sans">{p.teamName}</div>}
@@ -566,17 +670,28 @@ export default function RegistrationsPage() {
                     </td>
                     <td className="py-3 px-3 font-mono text-[11px]">
                       <span className="text-slate-800 font-medium">&#8377;{p.amount || 250}</span>
-                      <div className="text-[10px] text-slate-500 font-sans uppercase font-bold text-blue-600 mt-0.5 truncate max-w-[100px]">
-                        {p.paymentUtr || (p.razorpayOrderId ? 'Razorpay' : 'Spot Cash')}
+                      <div className={`text-[10px] font-sans uppercase font-bold mt-0.5 truncate max-w-[100px] ${
+                        p.paymentStatus === 'INITIALIZED' ? 'text-amber-700' : 'text-blue-600'
+                      }`}>
+                        {p.paymentStatus === 'INITIALIZED' ? 'Init (Unpaid)' : (p.paymentUtr || (p.razorpayOrderId ? 'Razorpay' : 'Spot Cash'))}
                       </div>
                     </td>
                     <td className="py-3 px-3 text-center">
                       <button
                         onClick={() => toggleVerified(p)}
-                        className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center justify-center gap-1 mx-auto transition-all ${p.isVerified ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100' : 'bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100'}`}
+                        className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center justify-center gap-1 mx-auto transition-all ${
+                          p.isVerified
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100'
+                            : p.paymentStatus === 'INITIALIZED'
+                            ? 'bg-amber-100 text-amber-800 border border-amber-300 hover:bg-amber-200'
+                            : 'bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100'
+                        }`}
+                        title={p.paymentStatus === 'INITIALIZED' ? 'Checkout initiated on website. Click to manually confirm.' : undefined}
                       >
                         {p.isVerified ? (
                           <><ShieldCheck className="w-3.5 h-3.5" /><span>Confirmed</span></>
+                        ) : p.paymentStatus === 'INITIALIZED' ? (
+                          <><Clock className="w-3.5 h-3.5 text-amber-700" /><span>Initialized</span></>
                         ) : (
                           <><ShieldAlert className="w-3.5 h-3.5" /><span>Pending</span></>
                         )}
@@ -585,7 +700,7 @@ export default function RegistrationsPage() {
                     <td className="py-3 px-3 text-[11px] font-mono text-slate-500">{formatDate(p.createdAt)}</td>
                     <td className="py-3 px-3 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <button onClick={() => sendConfirmationEmail(p)} title="Send / Resend Confirmation Email" className="p-1.5 rounded-lg bg-slate-100 hover:bg-violet-50 text-violet-600 border border-slate-200 transition-colors"><Mail className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => setEmailModalParticipant(p)} title="Send / Resend Confirmation Email" className="p-1.5 rounded-lg bg-slate-100 hover:bg-violet-50 text-violet-600 border border-slate-200 transition-colors"><Mail className="w-3.5 h-3.5" /></button>
                         <button onClick={() => setPassModalParticipant(p)} className="p-1.5 rounded-lg bg-slate-100 hover:bg-violet-50 text-violet-600 border border-slate-200 transition-colors" title="View Pass"><QrCode className="w-3.5 h-3.5" /></button>
                         <button onClick={() => setEditingParticipant(p)} className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors" title="Edit"><Edit className="w-3.5 h-3.5" /></button>
                         <button onClick={() => setDeletingId(p.id)} className="p-1.5 rounded-lg bg-slate-100 hover:bg-red-50 text-red-600 border border-slate-200 hover:border-red-200 transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
@@ -618,7 +733,7 @@ export default function RegistrationsPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    <button onClick={() => sendConfirmationEmail(p)} title="Send / Resend Confirmation Email" className="p-1.5 rounded-lg bg-violet-50 text-violet-700 border border-violet-200 active:scale-90"><Mail className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setEmailModalParticipant(p)} title="Send / Resend Confirmation Email" className="p-1.5 rounded-lg bg-violet-50 text-violet-700 border border-violet-200 active:scale-90"><Mail className="w-3.5 h-3.5" /></button>
                     <button onClick={() => setPassModalParticipant(p)} className="p-1.5 rounded-lg bg-violet-50 text-violet-700 border border-violet-200 active:scale-90" title="View Pass"><QrCode className="w-3.5 h-3.5" /></button>
                     <button onClick={() => setEditingParticipant(p)} className="p-1.5 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 active:scale-90" title="Edit"><Edit className="w-3.5 h-3.5" /></button>
                     <button onClick={() => setDeletingId(p.id)} className="p-1.5 rounded-lg bg-red-50 text-red-600 border border-red-200 active:scale-90" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
@@ -639,11 +754,33 @@ export default function RegistrationsPage() {
                   </div>
                 )}
                 <div className="flex items-center justify-between text-xs py-2 px-3 bg-slate-50 rounded-xl border border-slate-200 mb-3">
-                  <div className="flex items-center gap-1.5"><span className="text-slate-500">Type:</span><span className="font-mono font-bold text-blue-600 truncate max-w-[120px]">{p.paymentUtr || (p.razorpayOrderId ? 'RAZORPAY' : 'SPOT CASH')}</span></div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-500">Type:</span>
+                    <span className={`font-mono font-bold truncate max-w-[130px] ${
+                      p.paymentStatus === 'INITIALIZED' ? 'text-amber-700' : 'text-blue-600'
+                    }`}>
+                      {p.paymentStatus === 'INITIALIZED' ? 'INIT (CHECKOUT)' : (p.paymentUtr || (p.razorpayOrderId ? 'RAZORPAY' : 'SPOT CASH'))}
+                    </span>
+                  </div>
                   <span className="font-bold">&#8377;{p.amount || 250}</span>
                 </div>
-                <button onClick={() => toggleVerified(p)} className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-[0.99] ${p.isVerified ? 'bg-emerald-600 text-white' : 'bg-amber-100 text-amber-900 border border-amber-300'}`}>
-                  {p.isVerified ? <><ShieldCheck className="w-4 h-4" />CONFIRMED &bull; PAYMENT VERIFIED</> : <><ShieldAlert className="w-4 h-4 text-amber-700" />Pending &mdash; Tap to Confirm</>}
+                <button
+                  onClick={() => toggleVerified(p)}
+                  className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-[0.99] ${
+                    p.isVerified
+                      ? 'bg-emerald-600 text-white'
+                      : p.paymentStatus === 'INITIALIZED'
+                      ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                      : 'bg-amber-100 text-amber-900 border border-amber-300'
+                  }`}
+                >
+                  {p.isVerified ? (
+                    <><ShieldCheck className="w-4 h-4" />CONFIRMED &bull; PAYMENT VERIFIED</>
+                  ) : p.paymentStatus === 'INITIALIZED' ? (
+                    <><Clock className="w-4 h-4 text-amber-700" />INITIALIZED (UNPAID) &mdash; Tap to Confirm</>
+                  ) : (
+                    <><ShieldAlert className="w-4 h-4 text-amber-700" />Pending &mdash; Tap to Confirm</>
+                  )}
                 </button>
               </div>
             ))}
@@ -678,7 +815,17 @@ export default function RegistrationsPage() {
           <PassModal
             participant={passModalParticipant}
             onClose={() => setPassModalParticipant(null)}
-            onSendEmail={sendConfirmationEmail}
+            onSendEmail={(p) => setEmailModalParticipant(p)}
+          />
+        )}
+
+        {/* Send Email Info Modal */}
+        {emailModalParticipant && (
+          <SendEmailModal
+            participant={emailModalParticipant}
+            onClose={() => { if (!sendingEmail) setEmailModalParticipant(null); }}
+            onConfirm={handleConfirmSendEmail}
+            sending={sendingEmail}
           />
         )}
       </div>
@@ -837,3 +984,109 @@ function PassModal({ participant, onClose, onSendEmail }: { participant: Partici
     </div>
   );
 }
+
+// Send Email Confirmation Info Modal
+function SendEmailModal({
+  participant,
+  onClose,
+  onConfirm,
+  sending,
+}: {
+  participant: Participant;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+  sending: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+      <div className="bg-white p-5 sm:p-6 rounded-3xl max-w-md w-full border border-slate-200 shadow-2xl space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-2xl bg-violet-100 flex items-center justify-center text-violet-700 shadow-xs">
+              <Mail className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Send Confirmation Email?</h3>
+              <p className="text-[11px] text-slate-500">Official Pass &amp; Registration Dispatch</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            disabled={sending}
+            className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Info Box */}
+        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2.5 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-slate-500">Recipient Name:</span>
+            <span className="font-bold text-slate-900">{participant.name}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-slate-500">Email Address:</span>
+            <span className="font-mono font-semibold text-violet-700 select-all">{participant.email}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-slate-500">Participant ID:</span>
+            <span className="font-mono font-bold bg-violet-50 text-violet-800 px-2 py-0.5 rounded border border-violet-200">
+              {participant.formattedParticipantId || `TB${String(participant.participantNumber).padStart(3, '0')}`}
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-slate-500">College:</span>
+            <span className="font-medium text-slate-700 truncate max-w-[200px] text-right">{participant.college}</span>
+          </div>
+          <div className="flex items-center justify-between pt-2 border-t border-slate-200">
+            <span className="text-slate-500">Payment Status:</span>
+            <span className={`font-bold ${participant.isVerified ? 'text-emerald-700' : 'text-amber-700'}`}>
+              {participant.isVerified ? 'Confirmed & Verified' : 'Pending Verification'}
+            </span>
+          </div>
+        </div>
+
+        {/* Notice alert */}
+        <div className="flex items-start gap-2.5 p-3 rounded-xl bg-blue-50/80 border border-blue-200 text-blue-900 text-xs">
+          <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+          <p className="leading-relaxed">
+            This will dispatch the TechBETA 2026 confirmation email containing their participant pass, QR code, and schedule to <strong>{participant.email}</strong>.
+          </p>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={sending}
+            className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={sending}
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs shadow-xs transition-all active:scale-95 disabled:opacity-60"
+          >
+            {sending ? (
+              <>
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                <span>Sending Mail...</span>
+              </>
+            ) : (
+              <>
+                <Mail className="w-3.5 h-3.5" />
+                <span>Send Email Now</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+

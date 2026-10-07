@@ -5,8 +5,7 @@ import {
   UserPlus,
   CheckCircle2,
   Printer,
-  RotateCcw,
-  Sparkles
+  RotateCcw
 } from 'lucide-react';
 import { sounds } from '@/lib/audio';
 
@@ -117,11 +116,11 @@ export default function SpotRegisterPage() {
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2.5">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 flex items-center gap-2.5">
               <UserPlus className="w-6 h-6 text-blue-600 shrink-0" />
               <span>Spot Registration</span>
             </h1>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200">
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-blue-50 text-blue-700 border border-blue-200">
               ₹250
             </span>
           </div>
@@ -330,10 +329,10 @@ export default function SpotRegisterPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm shadow-md transition-all"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors"
             >
-              <Sparkles className="w-4 h-4" />
-              <span>{loading ? 'Processing...' : 'Complete Spot Registration & Issue Pass'}</span>
+              <UserPlus className="w-4 h-4" />
+              <span>{loading ? 'Registering...' : 'Register & Issue Pass'}</span>
             </button>
           </div>
 

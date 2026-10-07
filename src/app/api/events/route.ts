@@ -34,9 +34,10 @@ export async function GET() {
       return NextResponse.json(cachedEvents);
     }
 
-    const registrations = await prisma.registration.findMany({
+    const allRegistrations = await prisma.registration.findMany({
       orderBy: { createdAt: 'asc' },
     });
+    const registrations = allRegistrations.filter((r) => r.paymentStatus !== 'INITIALIZED');
 
     const savedConfigs = getEventConfigs();
 

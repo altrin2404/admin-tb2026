@@ -253,12 +253,12 @@ export default function EventDashboardsPage() {
       <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2.5">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 flex items-center gap-2.5">
               <Trophy className="w-6 h-6 text-blue-600" />
-              Official Event Dashboards
+              Event Dashboards
             </h1>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200">
-              6 Official Events
+            <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+              6 Events
             </span>
           </div>
 
