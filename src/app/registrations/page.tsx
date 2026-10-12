@@ -791,6 +791,7 @@ export default function RegistrationsPage() {
         {/* Add/Edit Modal */}
         {(editingParticipant || isAddingNew) && (
           <RegistrationFormModal
+            key={editingParticipant?.id || 'new'}
             participant={editingParticipant}
             onClose={() => { setEditingParticipant(null); setIsAddingNew(false); }}
             onSave={() => { setEditingParticipant(null); setIsAddingNew(false); fetchParticipants(); }}
@@ -852,73 +853,98 @@ function RegistrationFormModal({
       };
     }
 
-    let rawTech: string[] = [];
-    let rawNonTech: string[] = [];
+    try {
+      let rawTech: string[] = [];
+      let rawNonTech: string[] = [];
 
-    if (Array.isArray(participant.techEventsList) && participant.techEventsList.length > 0) {
-      rawTech = [...participant.techEventsList];
-    } else if (participant.technicalEvents) {
-      try {
-        const parsed = JSON.parse(participant.technicalEvents);
-        if (Array.isArray(parsed)) rawTech = parsed;
-      } catch {}
-    }
-
-    if (Array.isArray(participant.nonTechEventsList) && participant.nonTechEventsList.length > 0) {
-      rawNonTech = [...participant.nonTechEventsList];
-    } else if (participant.nonTechnicalEvents) {
-      try {
-        const parsed = JSON.parse(participant.nonTechnicalEvents);
-        if (Array.isArray(parsed)) rawNonTech = parsed;
-      } catch {}
-    }
-
-    const allRaw = [
-      ...rawTech,
-      ...rawNonTech,
-      ...(Array.isArray(participant.allEvents) ? participant.allEvents : []),
-      participant.event1,
-      participant.event2,
-    ].filter(Boolean) as string[];
-
-    const techDefs = TECHBETA_EVENTS.filter((e) => e.category === 'Technical');
-    const nonTechDefs = TECHBETA_EVENTS.filter((e) => e.category === 'Non-Technical');
-
-    const selectedTech: string[] = [];
-    const selectedNonTech: string[] = [];
-
-    techDefs.forEach((def) => {
-      const isMatched = allRaw.some(
-        (ev) =>
-          getShortCode(ev) === def.shortCode ||
-          ev.toLowerCase().includes(def.name.toLowerCase()) ||
-          def.name.toLowerCase().includes(ev.toLowerCase())
-      );
-      if (isMatched && !selectedTech.includes(def.name)) {
-        selectedTech.push(def.name);
+      // Prefer pre-parsed lists; fall back to JSON strings; fall back to legacy fields
+      if (Array.isArray(participant.techEventsList) && participant.techEventsList.length > 0) {
+        rawTech = [...participant.techEventsList];
+      } else if (participant.technicalEvents) {
+        try {
+          const parsed = JSON.parse(participant.technicalEvents);
+          if (Array.isArray(parsed)) rawTech = parsed.filter((x: unknown) => typeof x === 'string');
+        } catch {
+          rawTech = participant.event1 ? [participant.event1] : [];
+        }
+      } else if (participant.event1) {
+        rawTech = [participant.event1];
       }
-    });
 
-    nonTechDefs.forEach((def) => {
-      const isMatched = allRaw.some(
-        (ev) =>
-          getShortCode(ev) === def.shortCode ||
-          ev.toLowerCase().includes(def.name.toLowerCase()) ||
-          def.name.toLowerCase().includes(ev.toLowerCase())
-      );
-      if (isMatched && !selectedNonTech.includes(def.name)) {
-        selectedNonTech.push(def.name);
+      if (Array.isArray(participant.nonTechEventsList) && participant.nonTechEventsList.length > 0) {
+        rawNonTech = [...participant.nonTechEventsList];
+      } else if (participant.nonTechnicalEvents) {
+        try {
+          const parsed = JSON.parse(participant.nonTechnicalEvents);
+          if (Array.isArray(parsed)) rawNonTech = parsed.filter((x: unknown) => typeof x === 'string');
+        } catch {
+          rawNonTech = participant.event2 ? [participant.event2] : [];
+        }
+      } else if (participant.event2) {
+        rawNonTech = [participant.event2];
       }
-    });
 
-    if (selectedTech.length === 0 && rawTech.length > 0) {
-      selectedTech.push(...rawTech);
-    }
-    if (selectedNonTech.length === 0 && rawNonTech.length > 0) {
-      selectedNonTech.push(...rawNonTech);
-    }
+      const safeAllEvents = Array.isArray(participant.allEvents)
+        ? participant.allEvents.filter((x) => typeof x === 'string')
+        : [];
 
-    return { tech: selectedTech, nonTech: selectedNonTech };
+      const allRaw = [
+        ...rawTech,
+        ...rawNonTech,
+        ...safeAllEvents,
+      ].filter((x): x is string => typeof x === 'string' && x.length > 0);
+
+      const techDefs = TECHBETA_EVENTS.filter((e) => e.category === 'Technical');
+      const nonTechDefs = TECHBETA_EVENTS.filter((e) => e.category === 'Non-Technical');
+
+      const selectedTech: string[] = [];
+      const selectedNonTech: string[] = [];
+
+      techDefs.forEach((def) => {
+        const isMatched = allRaw.some((ev) => {
+          try {
+            return (
+              getShortCode(ev) === def.shortCode ||
+              ev.toLowerCase().includes(def.name.toLowerCase()) ||
+              def.name.toLowerCase().includes(ev.toLowerCase())
+            );
+          } catch { return false; }
+        });
+        if (isMatched && !selectedTech.includes(def.name)) {
+          selectedTech.push(def.name);
+        }
+      });
+
+      nonTechDefs.forEach((def) => {
+        const isMatched = allRaw.some((ev) => {
+          try {
+            return (
+              getShortCode(ev) === def.shortCode ||
+              ev.toLowerCase().includes(def.name.toLowerCase()) ||
+              def.name.toLowerCase().includes(ev.toLowerCase())
+            );
+          } catch { return false; }
+        });
+        if (isMatched && !selectedNonTech.includes(def.name)) {
+          selectedNonTech.push(def.name);
+        }
+      });
+
+      // Fallback: if no tech events matched from defs, use raw list directly
+      if (selectedTech.length === 0 && rawTech.length > 0) {
+        selectedTech.push(...rawTech.filter((x) => typeof x === 'string'));
+      }
+      if (selectedNonTech.length === 0 && rawNonTech.length > 0) {
+        selectedNonTech.push(...rawNonTech.filter((x) => typeof x === 'string'));
+      }
+
+      return { tech: selectedTech, nonTech: selectedNonTech };
+    } catch {
+      // Absolute fallback — never let the modal crash on edit
+      const fallbackTech = participant.event1 ? [participant.event1] : [];
+      const fallbackNonTech = participant.event2 ? [participant.event2] : [];
+      return { tech: fallbackTech, nonTech: fallbackNonTech };
+    }
   }, [participant]);
 
   const [formData, setFormData] = useState({
