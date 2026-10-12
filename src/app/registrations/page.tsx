@@ -787,50 +787,53 @@ export default function RegistrationsPage() {
             ))}
           </div>
         </div>
+      </div>
 
-        {/* Add/Edit Modal */}
-        {(editingParticipant || isAddingNew) && (
-          <RegistrationFormModal
-            key={editingParticipant?.id || 'new'}
-            participant={editingParticipant}
-            onClose={() => { setEditingParticipant(null); setIsAddingNew(false); }}
-            onSave={() => { setEditingParticipant(null); setIsAddingNew(false); fetchParticipants(); }}
-          />
-        )}
+      {/* Add/Edit Modal */}
+      {(editingParticipant || isAddingNew) && (
+        <RegistrationFormModal
+          key={editingParticipant?.id || 'new'}
+          participant={editingParticipant}
+          onClose={() => { setEditingParticipant(null); setIsAddingNew(false); }}
+          onSave={() => { setEditingParticipant(null); setIsAddingNew(false); fetchParticipants(); }}
+        />
+      )}
 
-        {/* Delete Confirm */}
-        {deletingId && (
-          <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white p-6 rounded-2xl max-w-sm w-full space-y-4 border border-slate-200 shadow-xl">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2"><Trash2 className="w-5 h-5 text-red-600" />Delete Participant</h3>
-              <p className="text-xs text-slate-600">Are you sure? This permanently removes the record.</p>
-              <div className="flex justify-end gap-2">
-                <button onClick={() => setDeletingId(null)} className="px-3 py-1.5 rounded-xl bg-slate-100 text-xs font-semibold text-slate-700">Cancel</button>
-                <button onClick={handleDelete} className="px-3 py-1.5 rounded-xl bg-red-600 text-xs font-bold text-white">Confirm Delete</button>
-              </div>
+      {/* Delete Confirm */}
+      {deletingId && (
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget) setDeletingId(null); }}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+        >
+          <div className="bg-white p-6 rounded-2xl max-w-sm w-full space-y-4 border border-slate-200 shadow-xl">
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2"><Trash2 className="w-5 h-5 text-red-600" />Delete Participant</h3>
+            <p className="text-xs text-slate-600">Are you sure? This permanently removes the record.</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setDeletingId(null)} className="px-3 py-1.5 rounded-xl bg-slate-100 text-xs font-semibold text-slate-700">Cancel</button>
+              <button onClick={handleDelete} className="px-3 py-1.5 rounded-xl bg-red-600 text-xs font-bold text-white">Confirm Delete</button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Pass Modal */}
-        {passModalParticipant && (
-          <PassModal
-            participant={passModalParticipant}
-            onClose={() => setPassModalParticipant(null)}
-            onSendEmail={(p) => setEmailModalParticipant(p)}
-          />
-        )}
+      {/* Pass Modal */}
+      {passModalParticipant && (
+        <PassModal
+          participant={passModalParticipant}
+          onClose={() => setPassModalParticipant(null)}
+          onSendEmail={(p) => setEmailModalParticipant(p)}
+        />
+      )}
 
-        {/* Send Email Info Modal */}
-        {emailModalParticipant && (
-          <SendEmailModal
-            participant={emailModalParticipant}
-            onClose={() => { if (!sendingEmail) setEmailModalParticipant(null); }}
-            onConfirm={handleConfirmSendEmail}
-            sending={sendingEmail}
-          />
-        )}
-      </div>
+      {/* Send Email Info Modal */}
+      {emailModalParticipant && (
+        <SendEmailModal
+          participant={emailModalParticipant}
+          onClose={() => { if (!sendingEmail) setEmailModalParticipant(null); }}
+          onConfirm={handleConfirmSendEmail}
+          sending={sendingEmail}
+        />
+      )}
     </>
   );
 }
@@ -1006,7 +1009,10 @@ function RegistrationFormModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-3 overflow-y-auto">
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 overflow-y-auto"
+    >
       <div className="bg-white p-4 sm:p-6 rounded-2xl max-w-lg w-full max-h-[92vh] flex flex-col border border-slate-200 shadow-2xl my-auto">
         <div className="flex items-center justify-between pb-3 border-b border-slate-200 shrink-0">
           <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -1156,7 +1162,10 @@ function PassModal({ participant, onClose, onSendEmail }: { participant: Partici
   }, [participant]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+    >
       <div className="bg-white p-6 rounded-3xl max-w-sm w-full border border-slate-200 shadow-2xl space-y-4 text-center">
         <div className="flex justify-between items-center pb-2 border-b border-slate-200">
           <span className="text-xs font-mono font-bold text-violet-700">REGISTRATION PASS</span>
@@ -1211,7 +1220,10 @@ function SendEmailModal({
   sending: boolean;
 }) {
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget && !sending) onClose(); }}
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+    >
       <div className="bg-white p-5 sm:p-6 rounded-3xl max-w-md w-full border border-slate-200 shadow-2xl space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">

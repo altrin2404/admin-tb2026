@@ -225,8 +225,9 @@ export async function exportEventRosterDocx(
   event: { name: string; shortCode: string; category: string; currentType: string },
   participants: ParticipantDocxData[]
 ) {
-  // A competition has team rows if configured as team OR if participants have team IDs
-  const isTeam = event.currentType.toLowerCase().includes('team') || participants.some((p) => Boolean(p.teamId));
+  // GENBUILD and UI-VERSE are strictly individual — never group into team rows
+  const isStrictlyIndividual = event.shortCode === 'GB' || event.shortCode === 'UV' || event.name.toLowerCase().includes('genbuild') || event.name.toLowerCase().includes('ui-verse');
+  const isTeam = !isStrictlyIndividual && (event.currentType.toLowerCase().includes('team') || participants.some((p) => Boolean(p.teamId)));
   const rows: TableRow[] = [];
 
   // Header Row matching exact user columns: S.No, Name, Department, College, Phone Number, Email, Signature

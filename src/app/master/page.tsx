@@ -1044,72 +1044,82 @@ export default function MasterSheetPage() {
             )}
           </div>
         </div>
+      </div>
 
-        {/* Add / Edit Participant Modal */}
-        {(editingParticipant || isAddingNew) && (
-          <ParticipantFormModal
-            participant={editingParticipant}
-            onClose={() => {
-              setEditingParticipant(null);
-              setIsAddingNew(false);
-            }}
-            onSave={(isEdit) => {
-              setEditingParticipant(null);
-              setIsAddingNew(false);
-              fetchParticipants();
-              showToast('success', isEdit ? 'Participant Updated' : 'Participant Added', isEdit ? 'Details saved successfully' : 'New registration created successfully');
-            }}
-          />
-        )}
+      {/* Add / Edit Participant Modal */}
+      {(editingParticipant || isAddingNew) && (
+        <ParticipantFormModal
+          key={editingParticipant?.id || (isAddingNew ? 'new' : 'none')}
+          participant={editingParticipant}
+          onClose={() => {
+            setEditingParticipant(null);
+            setIsAddingNew(false);
+            if (typeof window !== 'undefined' && window.location.search.includes('add=')) {
+              window.history.replaceState({}, '', window.location.pathname);
+            }
+          }}
+          onSave={(isEdit) => {
+            setEditingParticipant(null);
+            setIsAddingNew(false);
+            if (typeof window !== 'undefined' && window.location.search.includes('add=')) {
+              window.history.replaceState({}, '', window.location.pathname);
+            }
+            fetchParticipants();
+            showToast('success', isEdit ? 'Participant Updated' : 'Participant Added', isEdit ? 'Details saved successfully' : 'New registration created successfully');
+          }}
+        />
+      )}
 
-        {/* Delete Confirmation Modal */}
-        {deletingId && (
-          <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white p-6 rounded-2xl max-w-sm w-full space-y-4 border border-slate-200 shadow-xl">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Trash2 className="w-5 h-5 text-red-600" />
-                Delete Participant
-              </h3>
-              <p className="text-xs text-slate-600">
-                Are you sure you want to remove this participant? This action will permanently remove the record from Supabase.
-              </p>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  onClick={() => setDeletingId(null)}
-                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleDelete}
-                  className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-xs font-bold text-white shadow-xs"
-                >
-                  Confirm Delete
-                </button>
-              </div>
+      {/* Delete Confirmation Modal */}
+      {deletingId && (
+        <div
+          onClick={(e) => { if (e.target === e.currentTarget) setDeletingId(null); }}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+        >
+          <div className="bg-white p-6 rounded-2xl max-w-sm w-full space-y-4 border border-slate-200 shadow-xl">
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-red-600" />
+              Delete Participant
+            </h3>
+            <p className="text-xs text-slate-600">
+              Are you sure you want to remove this participant? This action will permanently remove the record from Supabase.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setDeletingId(null)}
+                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-xs font-bold text-white shadow-xs"
+              >
+                Confirm Delete
+              </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Entry Pass & QR Modal */}
-        {passModalParticipant && (
-          <PassModal
-            participant={passModalParticipant}
-            onClose={() => setPassModalParticipant(null)}
-            onSendEmail={(p) => setEmailModalParticipant(p)}
-          />
-        )}
+      {/* Entry Pass & QR Modal */}
+      {passModalParticipant && (
+        <PassModal
+          participant={passModalParticipant}
+          onClose={() => setPassModalParticipant(null)}
+          onSendEmail={(p) => setEmailModalParticipant(p)}
+        />
+      )}
 
-        {/* Send Email Info Modal */}
-        {emailModalParticipant && (
-          <SendEmailModal
-            participant={emailModalParticipant}
-            onClose={() => { if (!sendingEmail) setEmailModalParticipant(null); }}
-            onConfirm={handleConfirmSendEmail}
-            sending={sendingEmail}
-          />
-        )}
-      </div>
+      {/* Send Email Info Modal */}
+      {emailModalParticipant && (
+        <SendEmailModal
+          participant={emailModalParticipant}
+          onClose={() => { if (!sendingEmail) setEmailModalParticipant(null); }}
+          onConfirm={handleConfirmSendEmail}
+          sending={sendingEmail}
+        />
+      )}
     </>
   );
 }
@@ -1134,73 +1144,96 @@ function ParticipantFormModal({
       };
     }
 
-    let rawTech: string[] = [];
-    let rawNonTech: string[] = [];
+    try {
+      let rawTech: string[] = [];
+      let rawNonTech: string[] = [];
 
-    if (Array.isArray(participant.techEventsList) && participant.techEventsList.length > 0) {
-      rawTech = [...participant.techEventsList];
-    } else if (participant.technicalEvents) {
-      try {
-        const parsed = JSON.parse(participant.technicalEvents);
-        if (Array.isArray(parsed)) rawTech = parsed;
-      } catch {}
-    }
-
-    if (Array.isArray(participant.nonTechEventsList) && participant.nonTechEventsList.length > 0) {
-      rawNonTech = [...participant.nonTechEventsList];
-    } else if (participant.nonTechnicalEvents) {
-      try {
-        const parsed = JSON.parse(participant.nonTechnicalEvents);
-        if (Array.isArray(parsed)) rawNonTech = parsed;
-      } catch {}
-    }
-
-    const allRaw = [
-      ...rawTech,
-      ...rawNonTech,
-      ...(Array.isArray(participant.allEvents) ? participant.allEvents : []),
-      participant.event1,
-      participant.event2,
-    ].filter(Boolean) as string[];
-
-    const techDefs = TECHBETA_EVENTS.filter((e) => e.category === 'Technical');
-    const nonTechDefs = TECHBETA_EVENTS.filter((e) => e.category === 'Non-Technical');
-
-    const selectedTech: string[] = [];
-    const selectedNonTech: string[] = [];
-
-    techDefs.forEach((def) => {
-      const isMatched = allRaw.some(
-        (ev) =>
-          getShortCode(ev) === def.shortCode ||
-          ev.toLowerCase().includes(def.name.toLowerCase()) ||
-          def.name.toLowerCase().includes(ev.toLowerCase())
-      );
-      if (isMatched && !selectedTech.includes(def.name)) {
-        selectedTech.push(def.name);
+      // Prefer pre-parsed lists; fall back to JSON strings; fall back to legacy fields
+      if (Array.isArray(participant.techEventsList) && participant.techEventsList.length > 0) {
+        rawTech = [...participant.techEventsList];
+      } else if (participant.technicalEvents) {
+        try {
+          const parsed = JSON.parse(participant.technicalEvents);
+          if (Array.isArray(parsed)) rawTech = parsed.filter((x: unknown) => typeof x === 'string');
+        } catch {
+          rawTech = participant.event1 ? [participant.event1] : [];
+        }
+      } else if (participant.event1) {
+        rawTech = [participant.event1];
       }
-    });
 
-    nonTechDefs.forEach((def) => {
-      const isMatched = allRaw.some(
-        (ev) =>
-          getShortCode(ev) === def.shortCode ||
-          ev.toLowerCase().includes(def.name.toLowerCase()) ||
-          def.name.toLowerCase().includes(ev.toLowerCase())
-      );
-      if (isMatched && !selectedNonTech.includes(def.name)) {
-        selectedNonTech.push(def.name);
+      if (Array.isArray(participant.nonTechEventsList) && participant.nonTechEventsList.length > 0) {
+        rawNonTech = [...participant.nonTechEventsList];
+      } else if (participant.nonTechnicalEvents) {
+        try {
+          const parsed = JSON.parse(participant.nonTechnicalEvents);
+          if (Array.isArray(parsed)) rawNonTech = parsed.filter((x: unknown) => typeof x === 'string');
+        } catch {
+          rawNonTech = participant.event2 ? [participant.event2] : [];
+        }
+      } else if (participant.event2) {
+        rawNonTech = [participant.event2];
       }
-    });
 
-    if (selectedTech.length === 0 && rawTech.length > 0) {
-      selectedTech.push(...rawTech);
-    }
-    if (selectedNonTech.length === 0 && rawNonTech.length > 0) {
-      selectedNonTech.push(...rawNonTech);
-    }
+      const safeAllEvents = Array.isArray(participant.allEvents)
+        ? participant.allEvents.filter((x) => typeof x === 'string')
+        : [];
 
-    return { tech: selectedTech, nonTech: selectedNonTech };
+      const allRaw = [
+        ...rawTech,
+        ...rawNonTech,
+        ...safeAllEvents,
+      ].filter((x): x is string => typeof x === 'string' && x.length > 0);
+
+      const techDefs = TECHBETA_EVENTS.filter((e) => e.category === 'Technical');
+      const nonTechDefs = TECHBETA_EVENTS.filter((e) => e.category === 'Non-Technical');
+
+      const selectedTech: string[] = [];
+      const selectedNonTech: string[] = [];
+
+      techDefs.forEach((def) => {
+        const isMatched = allRaw.some((ev) => {
+          try {
+            return (
+              getShortCode(ev) === def.shortCode ||
+              ev.toLowerCase().includes(def.name.toLowerCase()) ||
+              def.name.toLowerCase().includes(ev.toLowerCase())
+            );
+          } catch { return false; }
+        });
+        if (isMatched && !selectedTech.includes(def.name)) {
+          selectedTech.push(def.name);
+        }
+      });
+
+      nonTechDefs.forEach((def) => {
+        const isMatched = allRaw.some((ev) => {
+          try {
+            return (
+              getShortCode(ev) === def.shortCode ||
+              ev.toLowerCase().includes(def.name.toLowerCase()) ||
+              def.name.toLowerCase().includes(ev.toLowerCase())
+            );
+          } catch { return false; }
+        });
+        if (isMatched && !selectedNonTech.includes(def.name)) {
+          selectedNonTech.push(def.name);
+        }
+      });
+
+      if (selectedTech.length === 0 && rawTech.length > 0) {
+        selectedTech.push(...rawTech.filter((x) => typeof x === 'string'));
+      }
+      if (selectedNonTech.length === 0 && rawNonTech.length > 0) {
+        selectedNonTech.push(...rawNonTech.filter((x) => typeof x === 'string'));
+      }
+
+      return { tech: selectedTech, nonTech: selectedNonTech };
+    } catch {
+      const fallbackTech = participant.event1 ? [participant.event1] : [];
+      const fallbackNonTech = participant.event2 ? [participant.event2] : [];
+      return { tech: fallbackTech, nonTech: fallbackNonTech };
+    }
   }, [participant]);
 
   const [formData, setFormData] = useState({
@@ -1270,7 +1303,10 @@ function ParticipantFormModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+    >
       <div className="bg-white p-4 sm:p-6 rounded-2xl max-w-lg w-full max-h-[92vh] flex flex-col border border-slate-200 shadow-2xl my-auto">
         <div className="flex items-center justify-between pb-3 border-b border-slate-200 shrink-0">
           <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -1459,7 +1495,10 @@ function PassModal({
   }, [participant]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+    >
       <div className="bg-white p-6 rounded-3xl max-w-sm w-full border border-slate-200 shadow-2xl space-y-4 text-center">
         <div className="flex justify-between items-center pb-2 border-b border-slate-200">
           <span className="text-xs font-mono font-bold text-blue-700">
@@ -1547,7 +1586,10 @@ function SendEmailModal({
   sending: boolean;
 }) {
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget && !sending) onClose(); }}
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+    >
       <div className="bg-white p-5 sm:p-6 rounded-3xl max-w-md w-full border border-slate-200 shadow-2xl space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">

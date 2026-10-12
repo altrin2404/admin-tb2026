@@ -75,19 +75,24 @@ export async function GET() {
         }
       });
 
+      // GENBUILD and UI-VERSE are strictly individual competitions (no team conflict)
+      const isStrictlyIndividual = eventDef.id === 'genbuild' || eventDef.id === 'ui-verse' || shortCode === 'GB' || shortCode === 'UV';
+
       // 2. Count occurrences of team key within this event to distinguish Teams from Individuals
       const teamCounts = new Map<string, number>();
-      matchingRegs.forEach((reg) => {
-        const teamKey = reg.teamName?.trim() ? `${reg.teamId}_${reg.teamName.trim().toLowerCase()}` : null;
-        if (teamKey) {
-          teamCounts.set(teamKey, (teamCounts.get(teamKey) || 0) + 1);
-        }
-      });
+      if (!isStrictlyIndividual) {
+        matchingRegs.forEach((reg) => {
+          const teamKey = reg.teamName?.trim() ? `${reg.teamId}_${reg.teamName.trim().toLowerCase()}` : null;
+          if (teamKey) {
+            teamCounts.set(teamKey, (teamCounts.get(teamKey) || 0) + 1);
+          }
+        });
+      }
 
       // 3. Assign sequential event IDs:
       // - If participants register as a team (sharing teamKey with other members in this event),
       //   both/all of them are flagged with the SAME event sequence number (e.g. LT01).
-      // - If registered as an individual, they get their own unique sequence number (e.g. LT02).
+      // - If registered as an individual, they get their own unique sequence number (e.g. LT02, GB01, UV01).
       // - Master numbers (e.g. TB001, TB002) remain completely distinct and never confused with event IDs.
       let currentEventSeq = 0;
       const teamSeqMap = new Map<string, number>();
@@ -101,7 +106,7 @@ export async function GET() {
 
       matchingRegs.forEach((reg) => {
         const teamKey = reg.teamName?.trim() ? `${reg.teamId}_${reg.teamName.trim().toLowerCase()}` : null;
-        const isTeam = !!(teamKey && (teamCounts.get(teamKey) || 0) > 1);
+        const isTeam = !isStrictlyIndividual && !!(teamKey && (teamCounts.get(teamKey) || 0) > 1);
 
         let seq: number;
         if (isTeam && teamKey) {
