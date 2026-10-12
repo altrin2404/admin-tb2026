@@ -13,7 +13,8 @@ import {
   ShieldCheck,
   X,
   AlertCircle,
-  Loader2
+  Loader2,
+  Users
 } from 'lucide-react';
 import { setPortalAuthenticated, lockPortal } from '@/lib/auth';
 
@@ -79,6 +80,17 @@ export default function PortalGatewayPage() {
       bgClass: 'bg-amber-50',
       borderHoverClass: 'hover:border-amber-300',
       icon: Trophy,
+    },
+    {
+      title: 'Master Sheet',
+      badge: 'Master Directory',
+      subtitle: 'Complete master participant sheet, search & rosters',
+      href: '/master',
+      ctaText: 'Open Master Sheet',
+      colorClass: 'text-blue-600',
+      bgClass: 'bg-blue-50',
+      borderHoverClass: 'hover:border-blue-300',
+      icon: Users,
     },
     {
       title: 'Attendance',

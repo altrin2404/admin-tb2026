@@ -191,13 +191,48 @@ export async function POST(request: Request) {
     // Invalidate cache immediately on new registration
     invalidateCache();
 
+    // Sync to Google Sheets webhook if configured
+    const googleSheetWebhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
+    if (googleSheetWebhookUrl) {
+      const timestamp = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+      const rowData = {
+        timestamp,
+        teamId: updated.participantId || updated.id,
+        participantId: updated.participantId || updated.id,
+        teamName: updated.teamName || 'Individual',
+        memberNumber: 1,
+        name: updated.name,
+        email: updated.email,
+        phone: updated.phone,
+        department: updated.department || "",
+        year: updated.year || "",
+        college: updated.college,
+        technicalEvents: JSON.parse(updated.technicalEvents || "[]").join(", "),
+        nonTechnicalEvents: JSON.parse(updated.nonTechnicalEvents || "[]").join(", "),
+        paymentUtr: updated.razorpayPaymentId || updated.paymentUtr || "N/A",
+        amount: updated.amount || 250,
+      };
+      fetch(googleSheetWebhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "register", rows: [rowData] }),
+      }).catch(err => {
+        import('@/lib/logger').then(({ logger }) => logger.error("Google Sheets backup sync failed", err));
+      });
+    }
+
+    const isSpot = body.source === 'spot' || entryNotes.toLowerCase().includes('spot');
+
     return NextResponse.json(
-      { message: 'Spot registration created successfully', registration: updated },
+      { 
+        message: isSpot ? 'Spot registration created successfully' : 'Participant added to Master Sheet successfully', 
+        registration: updated 
+      },
       { status: 201 }
     );
   } catch (error) {
     const { logger } = await import('@/lib/logger');
-    logger.error('Error creating spot registration', error);
+    logger.error('Error creating registration', error);
     return NextResponse.json(
       { error: 'Failed to create registration' },
       { status: 500 }

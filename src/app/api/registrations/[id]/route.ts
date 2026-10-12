@@ -81,13 +81,32 @@ export async function PUT(
       email = emailValidation.normalized;
     }
 
-    const techEvents = body.technicalEvents !== undefined 
-      ? JSON.stringify(sanitizeEventList(body.technicalEvents))
+    const sanitizedTechList = body.technicalEvents !== undefined
+      ? sanitizeEventList(body.technicalEvents)
+      : undefined;
+
+    const sanitizedNonTechList = body.nonTechnicalEvents !== undefined
+      ? sanitizeEventList(body.nonTechnicalEvents)
+      : undefined;
+
+    const techEvents = sanitizedTechList !== undefined 
+      ? JSON.stringify(sanitizedTechList)
       : existing.technicalEvents;
 
-    const nonTechEvents = body.nonTechnicalEvents !== undefined
-      ? JSON.stringify(sanitizeEventList(body.nonTechnicalEvents))
+    const nonTechEvents = sanitizedNonTechList !== undefined
+      ? JSON.stringify(sanitizedNonTechList)
       : existing.nonTechnicalEvents;
+
+    let nextEvent1 = existing.event1;
+    let nextEvent2 = existing.event2;
+    if (sanitizedTechList !== undefined || sanitizedNonTechList !== undefined) {
+      const allEventsList = [
+        ...(sanitizedTechList || []),
+        ...(sanitizedNonTechList || []),
+      ];
+      nextEvent1 = sanitizedTechList?.[0] || allEventsList[0] || null;
+      nextEvent2 = sanitizedNonTechList?.[0] || sanitizedTechList?.[1] || allEventsList[1] || null;
+    }
 
     let nextPaymentStatus = body.paymentStatus !== undefined ? body.paymentStatus : existing.paymentStatus;
     if (body.isVerified !== undefined) {
@@ -105,6 +124,7 @@ export async function PUT(
       where: { id },
       data: {
         participantId,
+        teamId: body.teamId !== undefined ? (body.teamId ? sanitizeString(body.teamId, 60) : null) : existing.teamId,
         name: body.name !== undefined ? sanitizeString(body.name, 100) : existing.name,
         email,
         phone,
@@ -119,6 +139,8 @@ export async function PUT(
         isEntered: body.isEntered !== undefined ? Boolean(body.isEntered) : existing.isEntered,
         enteredAt,
         entryNotes: body.entryNotes !== undefined ? sanitizeString(body.entryNotes, 250) : existing.entryNotes,
+        event1: nextEvent1,
+        event2: nextEvent2,
         technicalEvents: techEvents,
         nonTechnicalEvents: nonTechEvents,
       },

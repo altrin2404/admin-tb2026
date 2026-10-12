@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { formatDate, exportToCSV } from '@/lib/utils';
 import { TECHBETA_EVENTS, getShortCode } from '@/lib/events';
+import EventSelector from '@/components/EventSelector';
 
 interface Participant {
   id: string;
@@ -842,32 +843,140 @@ function RegistrationFormModal({
   onSave: () => void;
 }) {
   const isEdit = !!participant;
+
+  const initialEvents = useMemo(() => {
+    if (!participant) {
+      return {
+        tech: ['GENBUILD'],
+        nonTech: [] as string[],
+      };
+    }
+
+    let rawTech: string[] = [];
+    let rawNonTech: string[] = [];
+
+    if (Array.isArray(participant.techEventsList) && participant.techEventsList.length > 0) {
+      rawTech = [...participant.techEventsList];
+    } else if (participant.technicalEvents) {
+      try {
+        const parsed = JSON.parse(participant.technicalEvents);
+        if (Array.isArray(parsed)) rawTech = parsed;
+      } catch {}
+    }
+
+    if (Array.isArray(participant.nonTechEventsList) && participant.nonTechEventsList.length > 0) {
+      rawNonTech = [...participant.nonTechEventsList];
+    } else if (participant.nonTechnicalEvents) {
+      try {
+        const parsed = JSON.parse(participant.nonTechnicalEvents);
+        if (Array.isArray(parsed)) rawNonTech = parsed;
+      } catch {}
+    }
+
+    const allRaw = [
+      ...rawTech,
+      ...rawNonTech,
+      ...(Array.isArray(participant.allEvents) ? participant.allEvents : []),
+      participant.event1,
+      participant.event2,
+    ].filter(Boolean) as string[];
+
+    const techDefs = TECHBETA_EVENTS.filter((e) => e.category === 'Technical');
+    const nonTechDefs = TECHBETA_EVENTS.filter((e) => e.category === 'Non-Technical');
+
+    const selectedTech: string[] = [];
+    const selectedNonTech: string[] = [];
+
+    techDefs.forEach((def) => {
+      const isMatched = allRaw.some(
+        (ev) =>
+          getShortCode(ev) === def.shortCode ||
+          ev.toLowerCase().includes(def.name.toLowerCase()) ||
+          def.name.toLowerCase().includes(ev.toLowerCase())
+      );
+      if (isMatched && !selectedTech.includes(def.name)) {
+        selectedTech.push(def.name);
+      }
+    });
+
+    nonTechDefs.forEach((def) => {
+      const isMatched = allRaw.some(
+        (ev) =>
+          getShortCode(ev) === def.shortCode ||
+          ev.toLowerCase().includes(def.name.toLowerCase()) ||
+          def.name.toLowerCase().includes(ev.toLowerCase())
+      );
+      if (isMatched && !selectedNonTech.includes(def.name)) {
+        selectedNonTech.push(def.name);
+      }
+    });
+
+    if (selectedTech.length === 0 && rawTech.length > 0) {
+      selectedTech.push(...rawTech);
+    }
+    if (selectedNonTech.length === 0 && rawNonTech.length > 0) {
+      selectedNonTech.push(...rawNonTech);
+    }
+
+    return { tech: selectedTech, nonTech: selectedNonTech };
+  }, [participant]);
+
   const [formData, setFormData] = useState({
-    name: participant?.name || '', email: participant?.email || '', phone: participant?.phone || '',
-    college: participant?.college || '', department: participant?.department || '', year: participant?.year || '3rd Year',
+    name: participant?.name || '',
+    email: participant?.email || '',
+    phone: participant?.phone || '',
+    college: participant?.college || '',
+    department: participant?.department || '',
+    year: participant?.year || '3rd Year',
     teamId: participant?.teamId || '',
-    event1: participant?.techEventsList?.[0] || participant?.event1 || 'GENBUILD',
-    event2: participant?.nonTechEventsList?.[0] || participant?.event2 || '',
-    paymentUtr: participant?.paymentUtr || '', amount: participant?.amount || 200,
+    paymentUtr: participant?.paymentUtr || '',
+    amount: participant?.amount || 200,
     isVerified: participant?.isVerified ?? false,
   });
+
+  const [selectedTechEvents, setSelectedTechEvents] = useState<string[]>(initialEvents.tech);
+  const [selectedNonTechEvents, setSelectedNonTechEvents] = useState<string[]>(initialEvents.nonTech);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.college || !formData.phone) { setErr('Name, college, and mobile are required.'); return; }
-    setSaving(true); setErr('');
+    if (!formData.name || !formData.college || !formData.phone) {
+      setErr('Name, college, and mobile are required.');
+      return;
+    }
+    if (selectedTechEvents.length === 0 && selectedNonTechEvents.length === 0) {
+      setErr('Please select at least one event (technical or non-technical).');
+      return;
+    }
+
+    setSaving(true);
+    setErr('');
     try {
       const url = isEdit ? `/api/registrations/${participant.id}` : '/api/registrations';
       const res = await fetch(url, {
         method: isEdit ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, technicalEvents: formData.event1 ? [formData.event1] : [], nonTechnicalEvents: formData.event2 ? [formData.event2] : [] }),
+        body: JSON.stringify({
+          ...formData,
+          source: 'master',
+          entryNotes: isEdit ? undefined : 'Master Sheet Registration',
+          technicalEvents: selectedTechEvents,
+          nonTechnicalEvents: selectedNonTechEvents,
+          event1: selectedTechEvents[0] || selectedNonTechEvents[0] || '',
+          event2: selectedNonTechEvents[0] || selectedTechEvents[1] || '',
+        }),
       });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Failed to save'); }
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || 'Failed to save');
+      }
       onSave();
-    } catch (error: unknown) { setErr(error instanceof Error ? error.message : 'Error saving'); } finally { setSaving(false); }
+    } catch (error: unknown) {
+      setErr(error instanceof Error ? error.message : 'Error saving');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -876,55 +985,133 @@ function RegistrationFormModal({
         <div className="flex items-center justify-between pb-3 border-b border-slate-200 shrink-0">
           <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <UserPlus className="w-5 h-5 text-violet-600" />
-            {isEdit ? 'Edit Registration' : 'New Registration'}
+            {isEdit ? 'Edit Participant Details' : 'Add Participant to Master Sheet'}
           </h3>
-          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+            <X className="w-5 h-5" />
+          </button>
         </div>
-        {err && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs my-2">{err}</div>}
+        {err && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs my-2 shrink-0">{err}</div>}
         <form onSubmit={handleSubmit} className="space-y-3.5 text-xs overflow-y-auto pr-1 flex-1 py-2">
           <div>
             <label className="block text-slate-700 font-bold mb-1">Full Name *</label>
-            <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-violet-500 focus:bg-white text-xs sm:text-sm" placeholder="e.g. John Doe" />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div><label className="block text-slate-700 font-bold mb-1">Mobile *</label><input type="tel" required value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-violet-500 focus:bg-white font-mono text-xs" /></div>
-            <div><label className="block text-slate-700 font-bold mb-1">Email</label><input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-violet-500 focus:bg-white text-xs" /></div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div><label className="block text-slate-700 font-bold mb-1">College *</label><input type="text" required value={formData.college} onChange={(e) => setFormData({ ...formData, college: e.target.value })} className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-violet-500 focus:bg-white text-xs" /></div>
-            <div><label className="block text-slate-700 font-bold mb-1">Dept &amp; Year</label><input type="text" value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })} className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-violet-500 focus:bg-white text-xs" /></div>
+            <input
+              type="text"
+              required
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-violet-500 focus:bg-white text-xs sm:text-sm"
+              placeholder="e.g. John Doe"
+            />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-slate-700 font-bold mb-1">Technical Event</label>
-              <select value={formData.event1} onChange={(e) => setFormData({ ...formData, event1: e.target.value })} className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-violet-500 text-xs">
-                <option value="">None</option>
-                <option value="GENBUILD">GENBUILD</option>
-                <option value="UI-VERSE">UI-VERSE</option>
-                <option value="LOGIC TRAP">LOGIC TRAP</option>
-                <option value="IDEA FORGE">IDEA FORGE (Idea Presentation)</option>
-              </select>
+              <label className="block text-slate-700 font-bold mb-1">Mobile *</label>
+              <input
+                type="tel"
+                required
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-violet-500 focus:bg-white font-mono text-xs"
+              />
             </div>
             <div>
-              <label className="block text-slate-700 font-bold mb-1">Non-Tech Event</label>
-              <select value={formData.event2} onChange={(e) => setFormData({ ...formData, event2: e.target.value })} className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-violet-500 text-xs">
-                <option value="">None</option>
-                <option value="BRAND BLITZ">BRAND BLITZ</option>
-                <option value="BID & BUILD">BID & BUILD</option>
-              </select>
+              <label className="block text-slate-700 font-bold mb-1">Email</label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-violet-500 focus:bg-white text-xs"
+              />
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div><label className="block text-slate-700 font-bold mb-1">Payment Reference</label><input type="text" value={formData.paymentUtr} onChange={(e) => setFormData({ ...formData, paymentUtr: e.target.value })} className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-violet-500 font-mono text-xs" placeholder="Reference ID or CASH" /></div>
-            <div><label className="block text-slate-700 font-bold mb-1">Amount (&#8377;)</label><input type="number" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: Number(e.target.value) })} className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-violet-500 font-mono text-xs" /></div>
+            <div>
+              <label className="block text-slate-700 font-bold mb-1">College *</label>
+              <input
+                type="text"
+                required
+                value={formData.college}
+                onChange={(e) => setFormData({ ...formData, college: e.target.value })}
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-violet-500 focus:bg-white text-xs"
+              />
+            </div>
+            <div>
+              <label className="block text-slate-700 font-bold mb-1">Dept &amp; Year</label>
+              <input
+                type="text"
+                value={formData.department}
+                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-violet-500 focus:bg-white text-xs"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-slate-700 font-bold mb-1">Team ID (Optional)</label>
+            <input
+              type="text"
+              value={formData.teamId}
+              onChange={(e) => setFormData({ ...formData, teamId: e.target.value })}
+              className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-violet-500 focus:bg-white font-mono text-xs"
+              placeholder="e.g. TB26-1029-ABCD (Leave blank if individual)"
+            />
+          </div>
+
+          {/* Multi-Event Selector */}
+          <EventSelector
+            selectedTechEvents={selectedTechEvents}
+            onTechEventsChange={setSelectedTechEvents}
+            selectedNonTechEvents={selectedNonTechEvents}
+            onNonTechEventsChange={setSelectedNonTechEvents}
+            accentColor="violet"
+          />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-slate-700 font-bold mb-1">Payment Reference</label>
+              <input
+                type="text"
+                value={formData.paymentUtr}
+                onChange={(e) => setFormData({ ...formData, paymentUtr: e.target.value })}
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-violet-500 font-mono text-xs"
+                placeholder="Reference ID or CASH"
+              />
+            </div>
+            <div>
+              <label className="block text-slate-700 font-bold mb-1">Amount (&#8377;)</label>
+              <input
+                type="number"
+                value={formData.amount}
+                onChange={(e) => setFormData({ ...formData, amount: Number(e.target.value) })}
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-violet-500 font-mono text-xs"
+              />
+            </div>
           </div>
           <label className="flex items-center gap-2 cursor-pointer text-slate-700 font-medium pt-1">
-            <input type="checkbox" checked={formData.isVerified} onChange={(e) => setFormData({ ...formData, isVerified: e.target.checked })} className="h-4 w-4 rounded border-slate-300 text-violet-600" />
+            <input
+              type="checkbox"
+              checked={formData.isVerified}
+              onChange={(e) => setFormData({ ...formData, isVerified: e.target.checked })}
+              className="h-4 w-4 rounded border-slate-300 text-violet-600"
+            />
             <span>Payment Confirmed</span>
           </label>
-          <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-200">
-            <button type="button" onClick={onClose} className="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold text-xs">Cancel</button>
-            <button type="submit" disabled={saving} className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs">{saving ? 'Saving...' : isEdit ? 'Update' : 'Create'}</button>
+          <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-200 shrink-0">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-semibold text-xs"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs"
+            >
+              {saving ? 'Saving...' : isEdit ? 'Update Participant' : 'Add to Master Sheet'}
+            </button>
           </div>
         </form>
       </div>

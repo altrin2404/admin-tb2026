@@ -165,7 +165,8 @@ export function validateRegistrationPayload(body: any): {
       email = emailValidation.normalized;
     }
   } else if (phoneValidation.valid) {
-    email = `${phoneValidation.normalized}@spot.techbeta.in`;
+    const isSpot = body?.source === 'spot' || String(body?.entryNotes || '').toLowerCase().includes('spot');
+    email = `${phoneValidation.normalized}@${isSpot ? 'spot.techbeta.in' : 'master.techbeta.in'}`;
   }
 
   // Department & Year
@@ -181,13 +182,15 @@ export function validateRegistrationPayload(body: any): {
   const nonTechnicalEvents = sanitizeEventList(body?.nonTechnicalEvents);
 
   // Payment
-  const paymentUtr = sanitizeString(body?.paymentUtr || 'SPOT-CASH', 60);
+  const isSpot = body?.source === 'spot' || String(body?.entryNotes || '').toLowerCase().includes('spot');
+  const defaultUtr = isSpot ? 'SPOT-CASH' : 'CASH';
+  const paymentUtr = sanitizeString(body?.paymentUtr || defaultUtr, 60);
   const amount = validateAmount(body?.amount, 250);
 
   // Status
   const isVerified = body?.isVerified !== undefined ? Boolean(body.isVerified) : true;
   const isEntered = body?.isEntered !== undefined ? Boolean(body.isEntered) : false;
-  const entryNotes = sanitizeString(body?.entryNotes || 'Spot Registration', 200);
+  const entryNotes = sanitizeString(body?.entryNotes || (isSpot ? 'Spot Registration' : 'Master Sheet Entry'), 200);
 
   if (errors.length > 0) {
     return { valid: false, errors };

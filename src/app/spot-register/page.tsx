@@ -8,6 +8,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { sounds } from '@/lib/audio';
+import EventSelector from '@/components/EventSelector';
 
 export default function SpotRegisterPage() {
   const [formData, setFormData] = useState({
@@ -25,6 +26,8 @@ export default function SpotRegisterPage() {
     isEntered: true,
   });
 
+  const [selectedTechEvents, setSelectedTechEvents] = useState<string[]>(['GENBUILD']);
+  const [selectedNonTechEvents, setSelectedNonTechEvents] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [successData, setSuccessData] = useState<{
     id: string;
@@ -40,6 +43,10 @@ export default function SpotRegisterPage() {
     e.preventDefault();
     if (!formData.name.trim() || !formData.phone.trim() || !formData.college.trim()) {
       setError('Name, phone number, and college are required.');
+      return;
+    }
+    if (selectedTechEvents.length === 0 && selectedNonTechEvents.length === 0) {
+      setError('Please select at least one event (technical or non-technical).');
       return;
     }
 
@@ -58,8 +65,10 @@ export default function SpotRegisterPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
-          technicalEvents: formData.event1 ? [formData.event1] : [],
-          nonTechnicalEvents: formData.event2 ? [formData.event2] : [],
+          technicalEvents: selectedTechEvents,
+          nonTechnicalEvents: selectedNonTechEvents,
+          event1: selectedTechEvents[0] || selectedNonTechEvents[0] || '',
+          event2: selectedNonTechEvents[0] || selectedTechEvents[1] || '',
           entryNotes: 'On-Spot Help Desk Registration',
         }),
       });
@@ -93,6 +102,8 @@ export default function SpotRegisterPage() {
 
   const handleReset = () => {
     setSuccessData(null);
+    setSelectedTechEvents(['GENBUILD']);
+    setSelectedNonTechEvents([]);
     setFormData({
       name: '',
       email: '',
@@ -258,34 +269,13 @@ export default function SpotRegisterPage() {
             </div>
 
             {/* Events Selection */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-slate-800 font-bold mb-1">Technical Event</label>
-                <select
-                  value={formData.event1}
-                  onChange={(e) => setFormData({ ...formData, event1: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
-                >
-                  <option value="">None</option>
-                  <option value="GENBUILD">GENBUILD (GB)</option>
-                  <option value="UI-VERSE">UI-VERSE (UV)</option>
-                  <option value="LOGIC TRAP">LOGIC TRAP (LT)</option>
-                  <option value="IDEA FORGE">IDEA FORGE (IF) — Idea Presentation</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-slate-800 font-bold mb-1">Non-Technical Event</label>
-                <select
-                  value={formData.event2}
-                  onChange={(e) => setFormData({ ...formData, event2: e.target.value })}
-                  className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
-                >
-                  <option value="">None</option>
-                  <option value="BRAND BLITZ">BRAND BLITZ (BB)</option>
-                  <option value="BID & BUILD">BID & BUILD (BNB)</option>
-                </select>
-              </div>
-            </div>
+            <EventSelector
+              selectedTechEvents={selectedTechEvents}
+              onTechEventsChange={setSelectedTechEvents}
+              selectedNonTechEvents={selectedNonTechEvents}
+              onNonTechEventsChange={setSelectedNonTechEvents}
+              accentColor="blue"
+            />
 
             {/* Payment & Fee Calculation */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">

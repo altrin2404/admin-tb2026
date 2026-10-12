@@ -25,6 +25,8 @@ import {
 } from 'lucide-react';
 import { formatDate, formatTimeOnly, exportToCSV } from '@/lib/utils';
 import { sounds } from '@/lib/audio';
+import { TECHBETA_EVENTS, getShortCode } from '@/lib/events';
+import EventSelector from '@/components/EventSelector';
 
 interface Participant {
   id: string;
@@ -176,6 +178,12 @@ export default function MasterSheetPage() {
 
   useEffect(() => {
     fetchParticipants();
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('add') === '1' || params.get('add') === 'true') {
+        setIsAddingNew(true);
+      }
+    }
   }, []);
 
   // Initialized count
@@ -463,10 +471,10 @@ export default function MasterSheetPage() {
           <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <button
               onClick={() => setIsAddingNew(true)}
-              className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition-colors shadow-xs"
+              className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer"
             >
-              <UserPlus className="w-4 h-4" />
-              <span>Add Participant</span>
+              <UserPlus className="w-4 h-4 shrink-0" />
+              <span>+ Add Participant</span>
             </button>
 
             <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -1117,6 +1125,84 @@ function ParticipantFormModal({
   onSave: (isEdit: boolean) => void;
 }) {
   const isEdit = !!participant;
+
+  const initialEvents = useMemo(() => {
+    if (!participant) {
+      return {
+        tech: ['GENBUILD'],
+        nonTech: [] as string[],
+      };
+    }
+
+    let rawTech: string[] = [];
+    let rawNonTech: string[] = [];
+
+    if (Array.isArray(participant.techEventsList) && participant.techEventsList.length > 0) {
+      rawTech = [...participant.techEventsList];
+    } else if (participant.technicalEvents) {
+      try {
+        const parsed = JSON.parse(participant.technicalEvents);
+        if (Array.isArray(parsed)) rawTech = parsed;
+      } catch {}
+    }
+
+    if (Array.isArray(participant.nonTechEventsList) && participant.nonTechEventsList.length > 0) {
+      rawNonTech = [...participant.nonTechEventsList];
+    } else if (participant.nonTechnicalEvents) {
+      try {
+        const parsed = JSON.parse(participant.nonTechnicalEvents);
+        if (Array.isArray(parsed)) rawNonTech = parsed;
+      } catch {}
+    }
+
+    const allRaw = [
+      ...rawTech,
+      ...rawNonTech,
+      ...(Array.isArray(participant.allEvents) ? participant.allEvents : []),
+      participant.event1,
+      participant.event2,
+    ].filter(Boolean) as string[];
+
+    const techDefs = TECHBETA_EVENTS.filter((e) => e.category === 'Technical');
+    const nonTechDefs = TECHBETA_EVENTS.filter((e) => e.category === 'Non-Technical');
+
+    const selectedTech: string[] = [];
+    const selectedNonTech: string[] = [];
+
+    techDefs.forEach((def) => {
+      const isMatched = allRaw.some(
+        (ev) =>
+          getShortCode(ev) === def.shortCode ||
+          ev.toLowerCase().includes(def.name.toLowerCase()) ||
+          def.name.toLowerCase().includes(ev.toLowerCase())
+      );
+      if (isMatched && !selectedTech.includes(def.name)) {
+        selectedTech.push(def.name);
+      }
+    });
+
+    nonTechDefs.forEach((def) => {
+      const isMatched = allRaw.some(
+        (ev) =>
+          getShortCode(ev) === def.shortCode ||
+          ev.toLowerCase().includes(def.name.toLowerCase()) ||
+          def.name.toLowerCase().includes(ev.toLowerCase())
+      );
+      if (isMatched && !selectedNonTech.includes(def.name)) {
+        selectedNonTech.push(def.name);
+      }
+    });
+
+    if (selectedTech.length === 0 && rawTech.length > 0) {
+      selectedTech.push(...rawTech);
+    }
+    if (selectedNonTech.length === 0 && rawNonTech.length > 0) {
+      selectedNonTech.push(...rawNonTech);
+    }
+
+    return { tech: selectedTech, nonTech: selectedNonTech };
+  }, [participant]);
+
   const [formData, setFormData] = useState({
     name: participant?.name || '',
     email: participant?.email || '',
@@ -1125,14 +1211,14 @@ function ParticipantFormModal({
     department: participant?.department || '',
     year: participant?.year || '3rd Year',
     teamId: participant?.teamId || '',
-    event1: participant?.techEventsList?.[0] || participant?.event1 || 'GENBUILD',
-    event2: participant?.nonTechEventsList?.[0] || participant?.event2 || '',
     paymentUtr: participant?.paymentUtr || '',
     amount: participant?.amount || 200,
     isVerified: participant?.isVerified ?? true,
     isEntered: participant?.isEntered ?? false,
   });
 
+  const [selectedTechEvents, setSelectedTechEvents] = useState<string[]>(initialEvents.tech);
+  const [selectedNonTechEvents, setSelectedNonTechEvents] = useState<string[]>(initialEvents.nonTech);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
@@ -1140,6 +1226,10 @@ function ParticipantFormModal({
     e.preventDefault();
     if (!formData.name || !formData.college || !formData.phone) {
       setErr('Name, college, and mobile number are required.');
+      return;
+    }
+    if (selectedTechEvents.length === 0 && selectedNonTechEvents.length === 0) {
+      setErr('Please select at least one event (technical or non-technical).');
       return;
     }
 
@@ -1152,8 +1242,12 @@ function ParticipantFormModal({
 
       const payload = {
         ...formData,
-        technicalEvents: formData.event1 ? [formData.event1] : [],
-        nonTechnicalEvents: formData.event2 ? [formData.event2] : [],
+        source: 'master',
+        entryNotes: isEdit ? undefined : 'Master Sheet Registration',
+        technicalEvents: selectedTechEvents,
+        nonTechnicalEvents: selectedNonTechEvents,
+        event1: selectedTechEvents[0] || selectedNonTechEvents[0] || '',
+        event2: selectedNonTechEvents[0] || selectedTechEvents[1] || '',
       };
 
       const res = await fetch(url, {
@@ -1181,7 +1275,7 @@ function ParticipantFormModal({
         <div className="flex items-center justify-between pb-3 border-b border-slate-200 shrink-0">
           <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <UserPlus className="w-5 h-5 text-blue-600" />
-            {isEdit ? 'Edit Participant Details' : 'Add New Participant'}
+            {isEdit ? 'Edit Participant Details' : 'Add Participant to Master Sheet'}
           </h3>
           <button onClick={onClose} className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
             <X className="w-5 h-5" />
@@ -1255,34 +1349,25 @@ function ParticipantFormModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-slate-700 font-bold mb-1">Technical Event</label>
-              <select
-                value={formData.event1}
-                onChange={(e) => setFormData({ ...formData, event1: e.target.value })}
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white text-xs sm:text-sm"
-              >
-                <option value="">None</option>
-                <option value="GENBUILD">GENBUILD (GB)</option>
-                <option value="UI-VERSE">UI-VERSE (UV)</option>
-                <option value="LOGIC TRAP">LOGIC TRAP (LT)</option>
-                <option value="IDEA FORGE">IDEA FORGE (IF) — Idea Presentation</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-slate-700 font-bold mb-1">Non-Technical Event</label>
-              <select
-                value={formData.event2}
-                onChange={(e) => setFormData({ ...formData, event2: e.target.value })}
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white text-xs sm:text-sm"
-              >
-                <option value="">None</option>
-                <option value="BRAND BLITZ">BRAND BLITZ (BB)</option>
-                <option value="BID & BUILD">BID & BUILD (BNB)</option>
-              </select>
-            </div>
+          <div>
+            <label className="block text-slate-700 font-bold mb-1">Team ID (Optional)</label>
+            <input
+              type="text"
+              value={formData.teamId}
+              onChange={(e) => setFormData({ ...formData, teamId: e.target.value })}
+              className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-300 text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white font-mono text-xs sm:text-sm"
+              placeholder="e.g. TB26-1029-ABCD (Leave blank if individual)"
+            />
           </div>
+
+          {/* Multi-Event Selector */}
+          <EventSelector
+            selectedTechEvents={selectedTechEvents}
+            onTechEventsChange={setSelectedTechEvents}
+            selectedNonTechEvents={selectedNonTechEvents}
+            onNonTechEventsChange={setSelectedNonTechEvents}
+            accentColor="blue"
+          />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -1341,7 +1426,7 @@ function ParticipantFormModal({
               disabled={saving}
               className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-xs text-xs sm:text-sm transition-all"
             >
-              {saving ? 'Saving...' : isEdit ? 'Update Participant' : 'Create Registration'}
+              {saving ? 'Saving...' : isEdit ? 'Update Participant' : 'Add to Master Sheet'}
             </button>
           </div>
         </form>

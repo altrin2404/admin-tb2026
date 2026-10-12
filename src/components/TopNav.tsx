@@ -98,6 +98,18 @@ export default function TopNav() {
 
           {/* Right Header Status Bar */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Add Participant Button (Master Sheet) */}
+            {!isGateway && (
+              <Link
+                href="/master?add=1"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors shrink-0"
+                title="Add Participant to Master Sheet (Not Spot)"
+              >
+                <UserPlus className="h-3.5 w-3.5 shrink-0" />
+                <span className="hidden sm:inline">Add Participant</span>
+              </Link>
+            )}
+
             {/* Lock Portal Session Button */}
             {!isGateway && (
               <button
@@ -135,6 +147,17 @@ export default function TopNav() {
         {/* Mobile Dropdown Menu Drawer */}
         {!isGateway && mobileMenuOpen && (
           <div className="lg:hidden py-3 border-t border-slate-200 animate-fadeIn space-y-1.5">
+            <Link
+              href="/master?add=1"
+              onClick={() => setMobileMenuOpen(false)}
+              className="w-full flex items-center justify-between p-3 rounded-xl text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 transition-all shadow-xs mb-2"
+            >
+              <div className="flex items-center gap-3">
+                <UserPlus className="h-5 w-5" />
+                <span>+ Add Participant (Master Sheet)</span>
+              </div>
+              <span className="text-xs font-mono opacity-80">&rarr;</span>
+            </Link>
             {allNavLinks.map((link) => {
               const Icon = link.icon;
               const isActive = pathname === link.href;
