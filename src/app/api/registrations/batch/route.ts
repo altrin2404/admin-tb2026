@@ -22,13 +22,8 @@ export async function POST(request: Request) {
       const { invalidateCache } = await import('@/lib/cache');
       invalidateCache();
 
-      const { triggerVerificationEmail } = await import('@/lib/email');
-      const { logger } = await import('@/lib/logger');
-      recordsToVerify.forEach((record) => {
-        triggerVerificationEmail(record).catch((e) => logger.error('Batch email trigger error', e));
-      });
-
-      return NextResponse.json({ message: `Successfully verified ${ids.length} registrations and queued confirmation emails` });
+      // Verification email dispatching is disabled
+      return NextResponse.json({ message: `Successfully verified ${ids.length} registrations` });
     }
 
     if (action === 'unverify') {

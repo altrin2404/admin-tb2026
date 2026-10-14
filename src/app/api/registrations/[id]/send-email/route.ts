@@ -22,6 +22,12 @@ export async function POST(
 
     const result = await triggerVerificationEmail(registration);
 
+    if (!result.success) {
+      return NextResponse.json({
+        error: result.reason || 'Verification email sending is disabled',
+      }, { status: 400 });
+    }
+
     return NextResponse.json({
       success: true,
       message: `Confirmation email dispatched to ${registration.email}`,

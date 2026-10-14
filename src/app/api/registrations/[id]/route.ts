@@ -149,15 +149,11 @@ export async function PUT(
     const { invalidateCache } = await import('@/lib/cache');
     invalidateCache();
 
-    // Trigger official confirmation email if transitioned to verified or requested explicitly
-    let emailDispatched = false;
-    if ((body.isVerified === true && !existing.isVerified) || body.sendEmail === true) {
-      const { triggerVerificationEmail } = await import('@/lib/email');
-      const { logger } = await import('@/lib/logger');
-      triggerVerificationEmail(updated).catch((e: unknown) => logger.error('Email trigger failed', e));
-      emailDispatched = true;
+    // Email sending after verification is disabled
+    const emailDispatched = false;
 
-      // Also sync to Google Sheets
+    // Sync to Google Sheets if transitioned to verified
+    if (body.isVerified === true && !existing.isVerified) {
       const googleSheetWebhookUrl = process.env.GOOGLE_SHEETS_WEBHOOK_URL;
       if (googleSheetWebhookUrl) {
         const timestamp = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
