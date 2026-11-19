@@ -32,6 +32,23 @@ export function formatTimeOnly(date: string | Date | null | undefined): string {
   });
 }
 
+export function getPaymentType(p: {
+  paymentUtr?: string | null;
+  razorpayOrderId?: string | null;
+  razorpayPaymentId?: string | null;
+  paymentStatus?: string | null;
+  isVerified?: boolean;
+}): 'Razorpay' | 'Cash' {
+  const utr = (p.paymentUtr || '').trim().toUpperCase();
+  if (utr.includes('CASH') || utr.includes('UPI') || utr.includes('SPOT')) {
+    return 'Cash';
+  }
+  if (p.razorpayOrderId || p.razorpayPaymentId) {
+    return 'Razorpay';
+  }
+  return 'Cash';
+}
+
 export function exportToCSV(filename: string, rows: Record<string, unknown>[]) {
   if (!rows || !rows.length) return;
   const separator = ",";

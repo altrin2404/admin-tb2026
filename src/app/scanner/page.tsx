@@ -25,7 +25,7 @@ import {
   Phone,
   ArrowRight
 } from 'lucide-react';
-import { formatTimeOnly, exportToCSV } from '@/lib/utils';
+import { formatTimeOnly, exportToCSV, getPaymentType } from '@/lib/utils';
 import { playSound } from '@/lib/audio';
 
 interface Participant {
@@ -41,6 +41,10 @@ interface Participant {
   department?: string | null;
   year?: string | null;
   amount?: number | null;
+  paymentUtr?: string | null;
+  paymentStatus?: string | null;
+  razorpayOrderId?: string | null;
+  razorpayPaymentId?: string | null;
   isVerified: boolean;
   isEntered: boolean;
   enteredAt?: string | null;
@@ -598,7 +602,7 @@ export default function AttendancePage() {
         'Phone': p.phone,
         'Attendance': p.isEntered ? 'Present' : 'Absent',
         'Check-in Time': p.enteredAt ? formatTimeOnly(p.enteredAt) : '—',
-        'Fee': p.isVerified ? 'Paid' : 'Pending',
+        'Payment Type': getPaymentType(p),
       };
     });
     exportToCSV(`Attendance_${new Date().toISOString().slice(0, 10)}`, rows);

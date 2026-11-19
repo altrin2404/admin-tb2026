@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { isHiddenRegistration } from '@/lib/hiddenEntries';
 import { formatParticipantId } from '@/lib/idGenerator';
 
 export async function POST(request: Request) {
@@ -39,6 +40,9 @@ export async function POST(request: Request) {
       orderBy: { createdAt: 'asc' },
     });
 
+    // Filter out hidden registrations
+    participants = participants.filter((p) => !isHiddenRegistration(p));
+
     // If still not found and it looks like a participant number or general query
     if (!participants.length) {
       participants = await prisma.registration.findMany({
@@ -52,6 +56,7 @@ export async function POST(request: Request) {
           ],
         },
       });
+      participants = participants.filter((p) => !isHiddenRegistration(p));
     }
 
     if (!participants.length) {

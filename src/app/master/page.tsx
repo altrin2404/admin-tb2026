@@ -23,7 +23,7 @@ import {
   AlertTriangle,
   Info
 } from 'lucide-react';
-import { formatDate, formatTimeOnly, exportToCSV } from '@/lib/utils';
+import { formatDate, formatTimeOnly, exportToCSV, getPaymentType } from '@/lib/utils';
 import { sounds } from '@/lib/audio';
 import { TECHBETA_EVENTS, getShortCode } from '@/lib/events';
 import EventSelector from '@/components/EventSelector';
@@ -50,6 +50,8 @@ interface Participant {
   paymentUtr?: string | null;
   amount?: number | null;
   paymentStatus?: string | null;
+  razorpayOrderId?: string | null;
+  razorpayPaymentId?: string | null;
   isVerified: boolean;
   isEntered: boolean;
   enteredAt?: string | null;
@@ -422,9 +424,9 @@ export default function MasterSheetPage() {
       "Email": p.email,
       "Technical Events": p.techEventsList.join("; "),
       "Non-Technical Events": p.nonTechEventsList.join("; "),
-      "Payment Ref": p.paymentUtr || "N/A",
+      "Payment Ref": p.paymentUtr || p.razorpayPaymentId || "N/A",
       "Amount": p.amount || 200,
-      "Payment Verified": p.isVerified ? "YES" : "NO",
+      "Payment Type": getPaymentType(p),
       "Entered Campus": p.isEntered ? "YES" : "NO",
       "Entered At": p.enteredAt ? formatDate(p.enteredAt) : "N/A",
       "Registered On": formatDate(p.createdAt),
@@ -582,11 +584,10 @@ export default function MasterSheetPage() {
               <select
                 value={selectedPaymentStatus}
                 onChange={(e) => setSelectedPaymentStatus(e.target.value)}
-                className={`w-full px-3 py-2 rounded-xl text-xs font-semibold focus:outline-none focus:border-blue-500 focus:bg-white transition-all ${
-                  selectedPaymentStatus === 'INITIALIZED'
+                className={`w-full px-3 py-2 rounded-xl text-xs font-semibold focus:outline-none focus:border-blue-500 focus:bg-white transition-all ${selectedPaymentStatus === 'INITIALIZED'
                     ? 'bg-amber-50 border-2 border-amber-400 text-amber-900'
                     : 'bg-slate-50 border border-slate-300 text-slate-800'
-                }`}
+                  }`}
               >
                 <option value="">Active (Excl. Initialized)</option>
                 <option value="verified">Verified (Confirmed)</option>
@@ -766,8 +767,8 @@ export default function MasterSheetPage() {
                             onClick={() => toggleVerified(p)}
                             title="Click to toggle payment verification"
                             className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center justify-center gap-1 mx-auto transition-all ${p.isVerified
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100'
-                                : 'bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100'
+                              : 'bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100'
                               }`}
                           >
                             {p.isVerified ? (
@@ -790,8 +791,8 @@ export default function MasterSheetPage() {
                             onClick={() => toggleEntry(p)}
                             title={p.isEntered ? `Entered at ${formatDate(p.enteredAt)}. Click to undo.` : 'Click to check in'}
                             className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center justify-center gap-1 mx-auto transition-all ${p.isEntered
-                                ? 'bg-blue-50 text-blue-700 border border-blue-300 hover:bg-blue-100'
-                                : 'bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200 hover:text-slate-800'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-300 hover:bg-blue-100'
+                              : 'bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200 hover:text-slate-800'
                               }`}
                           >
                             {p.isEntered ? (
@@ -1001,8 +1002,8 @@ export default function MasterSheetPage() {
                       <button
                         onClick={() => toggleEntry(p)}
                         className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs ${p.isEntered
-                            ? 'bg-blue-600 text-white hover:bg-blue-700'
-                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                          ? 'bg-blue-600 text-white hover:bg-blue-700'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
                           }`}
                       >
                         {p.isEntered ? (
@@ -1021,8 +1022,8 @@ export default function MasterSheetPage() {
                       <button
                         onClick={() => toggleVerified(p)}
                         className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs ${p.isVerified
-                            ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                            : 'bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200'
+                          ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                          : 'bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200'
                           }`}
                       >
                         {p.isVerified ? (

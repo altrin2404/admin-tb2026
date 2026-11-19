@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getCached, setCached, invalidateCache } from '@/lib/cache';
 import { formatParticipantId } from '@/lib/idGenerator';
+import { isHiddenRegistration } from '@/lib/hiddenEntries';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +23,9 @@ export async function GET(request: Request) {
         orderBy: { createdAt: 'asc' },
       });
 
-      withSequentialIds = registrations.map((reg, index) => {
+      const visibleRegistrations = registrations.filter((r) => !isHiddenRegistration(r));
+
+      withSequentialIds = visibleRegistrations.map((reg, index) => {
         let techEvents: string[] = [];
         let nonTechEvents: string[] = [];
 

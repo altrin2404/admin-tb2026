@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { TECHBETA_EVENTS, getShortCode } from '@/lib/events';
+import { isHiddenRegistration } from '@/lib/hiddenEntries';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,9 +13,11 @@ export async function GET() {
       return NextResponse.json(cachedStats);
     }
 
-    const all = await prisma.registration.findMany({
+    const allRegistrations = await prisma.registration.findMany({
       orderBy: { createdAt: 'desc' },
     });
+
+    const all = allRegistrations.filter((r) => !isHiddenRegistration(r));
 
     const totalParticipants = all.length;
     const totalEntered = all.filter((r) => r.isEntered).length;

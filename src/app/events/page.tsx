@@ -30,7 +30,7 @@ import {
   ShieldCheck,
   ShieldAlert,
 } from 'lucide-react';
-import { exportToCSV, formatDate } from '@/lib/utils';
+import { exportToCSV, formatDate, getPaymentType } from '@/lib/utils';
 import { sounds } from '@/lib/audio';
 import { TECHBETA_EVENTS, getShortCode } from '@/lib/events';
 import EventSelector from '@/components/EventSelector';
@@ -50,6 +50,9 @@ interface EventParticipant {
   year?: string | null;
   paymentUtr?: string | null;
   amount?: number | null;
+  paymentStatus?: string | null;
+  razorpayOrderId?: string | null;
+  razorpayPaymentId?: string | null;
   isVerified: boolean;
   isEntered: boolean;
   enteredAt?: string | null;
@@ -432,9 +435,9 @@ export default function EventDashboardsPage() {
       Year: p.year || '',
       'Contact Number': p.phone,
       'Email': p.email,
-      'Payment Ref': p.paymentUtr || 'N/A',
+      'Payment Ref': p.paymentUtr || p.razorpayPaymentId || 'N/A',
       'Amount': p.amount || 200,
-      'Payment Verified': p.isVerified ? 'YES' : 'NO',
+      'Payment Type': getPaymentType(p),
       'Gate Entered': p.isEntered ? 'YES' : 'NO',
       'Entered At': p.enteredAt ? formatDate(p.enteredAt) : 'N/A',
       'Registered At': p.createdAt ? formatDate(p.createdAt) : 'N/A',

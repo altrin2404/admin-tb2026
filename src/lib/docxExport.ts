@@ -12,6 +12,7 @@ import {
   BorderStyle,
   ShadingType,
 } from 'docx';
+import { getPaymentType } from './utils';
 
 export interface ParticipantDocxData {
   participantNumber: number;
@@ -29,6 +30,11 @@ export interface ParticipantDocxData {
   techEventsList?: string[];
   nonTechEventsList?: string[];
   eventSequenceId?: string;
+  paymentUtr?: string | null;
+  amount?: number | null;
+  paymentStatus?: string | null;
+  razorpayOrderId?: string | null;
+  razorpayPaymentId?: string | null;
   isEntered?: boolean;
   isVerified?: boolean;
 }
@@ -115,11 +121,11 @@ export async function exportMasterSheetDocx(participants: ParticipantDocxData[])
         createHeaderCell('Participant Name', 14),
         createHeaderCell('Department', 10),
         createHeaderCell('Year', 5),
-        createHeaderCell('College Name', 15),
+        createHeaderCell('College Name', 14),
         createHeaderCell('Phone', 9),
         createHeaderCell('Email Address', 13),
         createHeaderCell('Events', 10),
-        createHeaderCell('Status', 5),
+        createHeaderCell('Payment Type', 6),
         createHeaderCell('Signature', 4),
       ],
     })
@@ -139,11 +145,11 @@ export async function exportMasterSheetDocx(participants: ParticipantDocxData[])
           createDataCell(p.name, 14, AlignmentType.LEFT, true),
           createDataCell(p.department || 'IT', 10),
           createDataCell(p.year || '3rd', 5, AlignmentType.CENTER),
-          createDataCell(p.college, 15),
+          createDataCell(p.college, 14),
           createDataCell(p.phone, 9),
           createDataCell(p.email, 13),
           createDataCell(eventsStr, 10),
-          createDataCell(statusStr, 5, AlignmentType.CENTER),
+          createDataCell(getPaymentType(p), 6, AlignmentType.CENTER),
           createDataCell('', 4), // Signature empty box
         ],
       })

@@ -9,7 +9,7 @@ import {
   CheckCheck, AlertTriangle, Info, Trophy, Building, ArrowUpRight,
   ChevronDown, ChevronUp, Filter
 } from 'lucide-react';
-import { formatDate, exportToCSV } from '@/lib/utils';
+import { formatDate, exportToCSV, getPaymentType } from '@/lib/utils';
 import { TECHBETA_EVENTS, getShortCode } from '@/lib/events';
 import EventSelector from '@/components/EventSelector';
 
@@ -38,6 +38,7 @@ interface Participant {
   isEntered: boolean;
   paymentStatus?: string | null;
   razorpayOrderId?: string | null;
+  razorpayPaymentId?: string | null;
   enteredAt?: string | null;
   entryNotes?: string | null;
   createdAt: string;
@@ -278,8 +279,8 @@ export default function RegistrationsPage() {
       'No': index + 1, 'ID': p.formattedParticipantId || `TB${String(p.participantNumber).padStart(3, '0')}`,
       'Name': p.name, 'College': p.college, 'Dept': p.department || '',
       'Phone': p.phone, 'Email': p.email, 'Events': p.allEvents.join('; '),
-      'Payment Ref': p.paymentUtr || 'N/A', 'Amount': p.amount || 250,
-      'Status': p.isVerified ? 'Confirmed' : 'Pending',
+      'Payment Ref': p.paymentUtr || p.razorpayPaymentId || 'N/A', 'Amount': p.amount || 250,
+      'Payment Type': getPaymentType(p),
       'Registered': formatDate(p.createdAt),
     }));
     exportToCSV('TechBETA-2026-Registrations', data);

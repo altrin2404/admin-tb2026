@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { isHiddenRegistration } from '@/lib/hiddenEntries';
 
 export async function POST(request: Request) {
   try {
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
       ? await prisma.registration.findUnique({ where: { id } })
       : await prisma.registration.findFirst({ where: { teamId } });
 
-    if (!target) {
+    if (!target || isHiddenRegistration(target)) {
       return NextResponse.json({ error: 'Participant not found.' }, { status: 404 });
     }
 

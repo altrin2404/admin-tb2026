@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { isHiddenRegistration } from '@/lib/hiddenEntries';
 
 export async function GET(
   request: Request,
@@ -11,7 +12,7 @@ export async function GET(
       where: { id },
     });
 
-    if (!registration) {
+    if (!registration || isHiddenRegistration(registration)) {
       return NextResponse.json({ error: 'Registration not found' }, { status: 404 });
     }
 

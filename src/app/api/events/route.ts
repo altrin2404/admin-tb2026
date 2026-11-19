@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { TECHBETA_EVENTS, getShortCode, formatEventId } from '@/lib/events';
+import { isHiddenRegistration } from '@/lib/hiddenEntries';
 import { formatParticipantId } from '@/lib/idGenerator';
 import fs from 'fs';
 import path from 'path';
@@ -34,9 +35,10 @@ export async function GET() {
       return NextResponse.json(cachedEvents);
     }
 
-    const allRegistrations = await prisma.registration.findMany({
+    const allRegistrationsRaw = await prisma.registration.findMany({
       orderBy: { createdAt: 'asc' },
     });
+    const allRegistrations = allRegistrationsRaw.filter((r) => !isHiddenRegistration(r));
     const registrations = allRegistrations.filter((r) => r.paymentStatus !== 'INITIALIZED');
 
     const savedConfigs = getEventConfigs();
